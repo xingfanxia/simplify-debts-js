@@ -179,10 +179,10 @@ app.get('/', (req, res) => {
     res.send(`
         <html>
         <head>
-            <title>Graphviz Renderer</title>
+            <title>Split Debt!</title>
         </head>
         <body>
-            <h1>a simple debt simplifier</h1>
+            <h1>A Simple Debt Simplifier</h1>
             <h3>I created this because this feature already exists in the app Splitwise, but not every one has a splitwise account and it seems fun to implement it myself.</h3>
             <h2>How to use</h2>
             <p>Enter your graph definition in the textarea below. Use the following format:</p>
