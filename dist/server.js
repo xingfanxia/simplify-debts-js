@@ -181,7 +181,7 @@ app.get('/', (req, res) => {
             <h2>How to use</h2>
             <p>Enter your graph definition in the textarea below. Use the following format:</p>
             <pre>
-# Everyone owes Joe
+# Everyone owes Joe (Including Joe himself, i.e. Joe paid for everyone involved for a bill)
 * -> Joe: 16.80
 
 # Sue owes Joe
@@ -201,7 +201,10 @@ Ellen
         </html>
     `);
 });
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = 3000;
+    app.listen(PORT, () => {
+        console.log(`Server is running on http://localhost:${PORT}`);
+    });
+}
+exports.default = app;
