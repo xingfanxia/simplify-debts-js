@@ -177,9 +177,12 @@ app.get('/', (req, res) => {
         </head>
         <body>
             <h1>Split Debt Better! A Simple Debt Simplifier</h1>
-            <h3>I created this because this feature already exists in the app Splitwise, but not every one has a splitwise account and it seems fun to implement it myself. \n
+            <p>I created this because even tho this feature already exists in the app Splitwise, but not every one has a splitwise account and it seems fun to implement it myself. \n\n</p>
             
-            Basically it's a graph problem and we can always simplify any number of transactions between n person to n-1 transactions.</h3>
+            <p>Basically it's a graph problem and we can always simplify any number of transactions among n person to n-1 transactions.</p>
+
+            <p>I know this UI is dead simple and looks shitty, hopefully gpt can be
+            good enough some day to make this more pleasing.</p>
             <h2>How to use</h2>
             <p>Enter your graph definition in the textarea below. Use the following format:</p>
             <pre>
