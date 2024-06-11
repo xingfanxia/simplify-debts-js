@@ -173,11 +173,13 @@ app.get('/', (req, res) => {
     res.send(`
         <html>
         <head>
-            <title>Graphviz Renderer</title>
+            <title>Split Debt Better!</title>
         </head>
         <body>
-            <h1>a simple debt simplifier</h1>
-            <h3>I created this because this feature already exists in the app Splitwise, but not every one has a splitwise account and it seems fun to implement it myself.</h3>
+            <h1>Split Debt Better! A Simple Debt Simplifier</h1>
+            <h3>I created this because this feature already exists in the app Splitwise, but not every one has a splitwise account and it seems fun to implement it myself. \n
+            
+            Basically it's a graph problem and we can always simplify any number of transactions between n person to n-1 transactions.</h3>
             <h2>How to use</h2>
             <p>Enter your graph definition in the textarea below. Use the following format:</p>
             <pre>
