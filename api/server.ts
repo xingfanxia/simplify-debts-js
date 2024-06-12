@@ -1,6 +1,6 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-const dot2svg = require('@aduh95/viz.js/async');
+const vizRenderStringSync = require("@aduh95/viz.js/sync");
 
 class Edge {
     startNode: string;
@@ -162,7 +162,7 @@ ${finalEdges.map(edge => edge.toGraphvizString()).join('\n')}
     console.log('Graphviz String:', graphvizString); // Debugging line
 
     try {
-        const svg = await dot2svg(graphvizString);
+        const svg = await vizRenderStringSync(graphvizString);
         res.send(`
             <div>
                 ${svg}

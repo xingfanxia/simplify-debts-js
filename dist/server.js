@@ -14,7 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const body_parser_1 = __importDefault(require("body-parser"));
-const dot2svg = require('@aduh95/viz.js/async');
+const vizRenderStringSync = require("@aduh95/viz.js/sync");
 class Edge {
     constructor(startNode, endNode, weight) {
         this.startNode = startNode;
@@ -156,7 +156,7 @@ ${finalEdges.map(edge => edge.toGraphvizString()).join('\n')}
 }`;
     console.log('Graphviz String:', graphvizString); // Debugging line
     try {
-        const svg = yield dot2svg(graphvizString);
+        const svg = yield vizRenderStringSync(graphvizString);
         res.send(`
             <div>
                 ${svg}
