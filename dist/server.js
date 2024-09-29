@@ -14,6 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const body_parser_1 = __importDefault(require("body-parser"));
+const path_1 = __importDefault(require("path"));
 const vizRenderStringSync = require("@aduh95/viz.js/sync");
 class Edge {
     constructor(startNode, endNode, weight) {
@@ -36,6 +37,8 @@ class Edge {
 }
 const app = (0, express_1.default)();
 app.use(body_parser_1.default.urlencoded({ extended: true }));
+// Serve static files from the src directory
+app.use(express_1.default.static(path_1.default.join(__dirname, '../src')));
 const SEARCH_COMMENT = /^(#| *$)/;
 const SEARCH_EDGE = /(\w+|\*) *-> *(\w+|\*): *([0-9]+(\.[0-9]+)?)/;
 const SEARCH_NODE = /^(\w+)$/;
@@ -142,7 +145,7 @@ app.post('/parse', (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         }
     });
     if (errors.length > 0) {
-        res.status(400).send(errors.join('\n'));
+        res.status(400).json({ errors: errors.join('\n') });
         return;
     }
     const verbose = false;
@@ -157,20 +160,15 @@ ${finalEdges.map(edge => edge.toGraphvizString()).join('\n')}
     console.log('Graphviz String:', graphvizString); // Debugging line
     try {
         const svg = yield vizRenderStringSync(graphvizString);
-        res.send(`
-            <div>
-                ${svg}
-            </div>
-            <a href="/">Back</a>
-        `);
+        res.json({ svg });
     }
     catch (err) {
         console.error('Render Error:', err); // Log the error for debugging
-        res.status(500).send('Error rendering Graphviz image');
+        res.status(500).json({ error: 'Error rendering Graphviz image' });
     }
 }));
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
+    res.sendFile(path_1.default.join(__dirname, '..', 'src', 'app.html'));
 });
 if (process.env.NODE_ENV !== 'production') {
     const PORT = 3000;

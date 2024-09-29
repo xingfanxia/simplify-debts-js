@@ -33,6 +33,9 @@ class Edge {
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Serve static files from the src directory
+app.use(express.static(path.join(__dirname, '../src')));
+
 const SEARCH_COMMENT = /^(#| *$)/;
 const SEARCH_EDGE = /(\w+|\*) *-> *(\w+|\*): *([0-9]+(\.[0-9]+)?)/;
 const SEARCH_NODE = /^(\w+)$/;
@@ -172,7 +175,7 @@ ${finalEdges.map(edge => edge.toGraphvizString()).join('\n')}
 });
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'index.html'));
+    res.sendFile(path.join(__dirname, '..', 'src', 'app.html'));
 });
 
 if (process.env.NODE_ENV !== 'production') {
