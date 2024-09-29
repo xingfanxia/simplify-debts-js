@@ -28,33 +28,3 @@ The Debt Simplifier uses a graph-based algorithm to minimize the number of trans
 5. This process continues until all debts are settled.
 
 This approach ensures that any number of transactions among n people can always be simplified to at most n-1 transactions.
-
-## Getting Started
-
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
-
-### Prerequisites
-
-- Node.js (v14 or later)
-- npm (v6 or later)
-
-### Installation
-
-1. Clone the repository:
-   ```
-   git clone https://github.com/xingfanxia/simplify-debts-js.git
-   ```
-
-2. Navigate to the project directory:
-   ```
-   cd simplify-debts-js
-   ```
-
-3. Install dependencies:
-   ```
-   npm install
-   ```
-
-### Development
-
-To run the application in development mode:
