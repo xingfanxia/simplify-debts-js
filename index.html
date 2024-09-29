@@ -3,12 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Debt Simplification</title>
+    <title>Split Debt Better!</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
 </head>
-<body>
-    <form action="/parse" method="post">
-        <textarea name="input" rows="10" cols="30"></textarea><br>
-        <input type="submit" value="Submit">
-    </form>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div id="app" class="container mx-auto p-8 bg-white rounded-lg shadow-lg max-w-2xl opacity-0">
+        <h1 class="text-4xl font-bold mb-6 text-center text-blue-600">Split Debt Better!</h1>
+        <p class="mb-4 text-gray-700">A simple debt simplifier that can reduce any number of transactions among n people to n-1 transactions.</p>
+        
+        <h2 class="text-2xl font-semibold mb-4 text-blue-500">How to use</h2>
+        <p class="mb-4 text-gray-700">Enter your graph definition in the textarea below. Use the following format:</p>
+        <pre class="bg-gray-200 p-4 rounded-md mb-4 text-sm overflow-x-auto">
+# Everyone owes Joe (Including Joe himself, i.e. Joe paid for everyone involved for a bill)
+* -> Joe: 16.80
+
+# Sue owes Joe
+Sue -> Joe: 24.40
+
+# Bob owes Sue
+Bob -> Sue: 12.20
+
+# Ellen is part of all the debt and didn't pay for anything
+Ellen
+        </pre>
+        
+        <form id="debtForm" class="space-y-4">
+            <textarea name="input" rows="10" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200 ease-in-out" placeholder="Enter your debt graph here..."></textarea>
+            <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition duration-200 ease-in-out">Submit</button>
+        </form>
+
+        <div id="result" class="mt-8"></div>
+    </div>
+
+    <script>
+        gsap.to("#app", {duration: 1, opacity: 1, y: 20, ease: "power3.out"});
+
+        document.getElementById('debtForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = e.target.elements.input.value;
+            const result = document.getElementById('result');
+            result.innerHTML = 'Processing...';
+
+            try {
+                const response = await fetch('/parse', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({ input }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    result.innerHTML = data.svg;
+                } else {
+                    result.innerHTML = `<p class="text-red-500">${data.errors || data.error}</p>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<p class="text-red-500">An error occurred: ${error.message}</p>`;
+            }
+        });
+    </script>
 </body>
 </html>

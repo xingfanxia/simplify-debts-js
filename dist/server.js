@@ -170,41 +170,7 @@ ${finalEdges.map(edge => edge.toGraphvizString()).join('\n')}
     }
 }));
 app.get('/', (req, res) => {
-    res.send(`
-        <html>
-        <head>
-            <title>Split Debt Better!</title>
-        </head>
-        <body>
-            <h1>Split Debt Better! A Simple Debt Simplifier</h1>
-            <p>I created this because even tho this feature already exists in the app Splitwise, but not every one has a splitwise account and it seems fun to implement it myself. \n\n</p>
-            
-            <p>Basically it's a graph problem and we can always simplify any number of transactions among n person to n-1 transactions.</p>
-
-            <p>I know this UI is dead simple and looks shitty, hopefully gpt can be
-            good enough some day to make this more pleasing.</p>
-            <h2>How to use</h2>
-            <p>Enter your graph definition in the textarea below. Use the following format:</p>
-            <pre>
-# Everyone owes Joe (Including Joe himself, i.e. Joe paid for everyone involved for a bill)
-* -> Joe: 16.80
-
-# Sue owes Joe
-Sue -> Joe: 24.40
-
-# Bob owes Sue
-Bob -> Sue: 12.20
-
-# Ellen is part of all the debt and didn't pay for anything
-Ellen
-                </pre>
-            <form action="/parse" method="post">
-                <textarea name="input" rows="10" cols="30"></textarea><br>
-                <input type="submit" value="Submit">
-            </form>
-        </body>
-        </html>
-    `);
+    res.sendFile(__dirname + '/index.html');
 });
 if (process.env.NODE_ENV !== 'production') {
     const PORT = 3000;
