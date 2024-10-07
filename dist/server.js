@@ -40,16 +40,20 @@ app.use(body_parser_1.default.urlencoded({ extended: true }));
 // Serve static files from the src directory
 app.use(express_1.default.static(path_1.default.join(__dirname, '../src')));
 const SEARCH_COMMENT = /^(#| *$)/;
-const SEARCH_EDGE = /(\w+|\*) *-> *(\w+|\*): *([0-9]+(\.[0-9]+)?)/;
+const SEARCH_EDGE = /^(\w+|\*)(,\s*\w+)*\s*->\s*(\w+|\*):\s*([0-9]+(\.[0-9]+)?)/;
 const SEARCH_NODE = /^(\w+)$/;
 const parseEdge = (line) => {
     const m = SEARCH_EDGE.exec(line);
     if (m) {
         console.log('Matched groups:', m); // Debugging line
-        const startNode = m[1];
-        const endNode = m[2];
-        const weight = parseFloat(m[3]);
-        return new Edge(startNode, endNode, weight);
+        const debtors = m[1] ? (m[1] === '*' ? ['*'] : m[1].split(',').map(d => d.trim())) : [];
+        const endNode = m[3];
+        const weight = parseFloat(m[4]);
+        // If debtors is empty (someone paying for themselves), we don't create an edge
+        if (debtors.length === 0) {
+            return [];
+        }
+        return debtors.map(debtor => new Edge(debtor, endNode, weight / debtors.length));
     }
     throw new Error("Invalid input line");
 };
@@ -132,16 +136,30 @@ app.post('/parse', (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     lines.forEach((line, i) => {
         line = line.trim(); // Trim any extra whitespace
         console.log(`Processing line ${i + 1}: '${line}'`); // Debugging line
-        try {
-            edges.push(parseEdge(line));
+        if (line === '') {
+            return; // Skip empty lines
         }
-        catch (err) {
-            if (SEARCH_NODE.test(line)) {
+        try {
+            if (SEARCH_EDGE.test(line)) {
+                const newEdges = parseEdge(line);
+                edges.push(...newEdges);
+                // If no edges were created (someone paying for themselves), add the person as an empty node
+                if (newEdges.length === 0) {
+                    const payerMatch = /-> (\w+):/.exec(line);
+                    if (payerMatch) {
+                        emptyNodes.push(payerMatch[1]);
+                    }
+                }
+            }
+            else if (SEARCH_NODE.test(line)) {
                 emptyNodes.push(line);
             }
             else if (!SEARCH_COMMENT.test(line)) {
                 errors.push(`Invalid input on line ${i + 1}: ${line}`);
             }
+        }
+        catch (err) {
+            errors.push(`Error processing line ${i + 1}: ${line}`);
         }
     });
     if (errors.length > 0) {

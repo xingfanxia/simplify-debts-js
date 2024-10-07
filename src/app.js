@@ -7,7 +7,7 @@ function addDebtEntry() {
     const entryDiv = document.createElement('div');
     entryDiv.className = 'grid grid-cols-12 gap-2 items-center mb-2 p-2 bg-gray-100 rounded-lg opacity-0';
     entryDiv.innerHTML = `
-        <input type="text" value="Everyone" placeholder="Who owes" class="col-span-4 sm:col-span-3 p-2 border rounded text-sm">
+        <input type="text" value="Everyone" placeholder="Who owes (comma-separated)" class="col-span-4 sm:col-span-3 p-2 border rounded text-sm">
         <span class="col-span-2 sm:col-span-1 text-sm text-gray-600 text-center">owes</span>
         <input type="text" placeholder="Who pays" class="col-span-6 sm:col-span-3 p-2 border rounded text-sm">
         <span class="col-span-2 sm:col-span-1 text-sm text-gray-600 text-center">of</span>
@@ -32,8 +32,13 @@ function addDebtEntry() {
 
     const whoOwesInput = entryDiv.querySelector('input');
     whoOwesInput.addEventListener('input', function() {
-        const displayText = this.value.trim().toLowerCase() === '*' ? 'Everyone' : this.value;
-        this.value = displayText;
+        const inputValue = this.value.trim().toLowerCase();
+        if (inputValue === '*') {
+            this.value = 'Everyone';
+        } else {
+            // Allow comma-separated names
+            this.value = inputValue.split(',').map(name => name.trim()).join(', ');
+        }
     });
 
     entryDiv.querySelector('button').addEventListener('click', () => {
@@ -97,15 +102,23 @@ function compileEntries() {
         const inputs = entry.querySelectorAll('input');
         if (inputs.length === 3) {
             // Debt relationship
-            const [debtor, debtee, amount] = inputs;
+            const [debtors, debtee, amount] = inputs;
             if (debtee.value && amount.value) {
-                const debtorValue = debtor.value.trim().toLowerCase() === 'everyone' ? '*' : debtor.value;
-                if (!debtGraph[debtorValue]) {
-                    debtGraph[debtorValue] = {};
+                const debtorList = debtors.value.trim().toLowerCase() === 'everyone' ? ['*'] : debtors.value.split(',').map(d => d.trim()).filter(d => d !== '');
+                
+                // If debtorList is empty, it means someone is paying for themselves
+                if (debtorList.length === 0) {
+                    participants.add(debtee.value);
+                } else {
+                    debtorList.forEach(debtor => {
+                        if (!debtGraph[debtor]) {
+                            debtGraph[debtor] = {};
+                        }
+                        debtGraph[debtor][debtee.value] = (debtGraph[debtor][debtee.value] || 0) + parseFloat(amount.value) / debtorList.length;
+                        participants.add(debtee.value);
+                        if (debtor !== '*') participants.add(debtor);
+                    });
                 }
-                debtGraph[debtorValue][debtee.value] = (debtGraph[debtorValue][debtee.value] || 0) + parseFloat(amount.value);
-                participants.add(debtee.value);
-                if (debtorValue !== '*') participants.add(debtorValue);
             }
         } else if (inputs.length === 1) {
             // Group entry
