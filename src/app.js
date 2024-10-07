@@ -3,6 +3,8 @@ const tl = gsap.timeline();
 const entries = [];
 let groupEntryAdded = false;
 
+let roundToInteger = false;
+
 function addDebtEntry() {
     const entryDiv = document.createElement('div');
     entryDiv.className = 'grid grid-cols-12 gap-2 items-center mb-2 p-2 bg-gray-100 rounded-lg opacity-0';
@@ -151,6 +153,10 @@ function compileEntries() {
     return result;
 }
 
+function updateRoundToInteger() {
+    roundToInteger = document.getElementById('roundToInteger').checked;
+}
+
 document.getElementById('addDebtBtn').addEventListener('click', addDebtEntry);
 document.getElementById('addGroupBtn').addEventListener('click', function() {
     addGroupEntry();
@@ -173,9 +179,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch('/parse', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Content-Type': 'application/json',
                 },
-                body: new URLSearchParams({ input }),
+                body: JSON.stringify({ input, roundToInteger }),
             });
 
             const data = await response.json();
@@ -198,6 +204,9 @@ document.addEventListener('DOMContentLoaded', function() {
             result.innerHTML = `<p class="text-red-500">An error occurred: ${error.message}</p>`;
         }
     });
+
+    // Add this event listener at the end of the file
+    document.getElementById('roundToInteger').addEventListener('change', updateRoundToInteger);
 });
 
 // Initial animation for the form
