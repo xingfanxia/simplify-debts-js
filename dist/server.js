@@ -23,7 +23,8 @@ class Edge {
         this.weight = weight;
     }
     toGraphvizString() {
-        return `${this.startNode} -> ${this.endNode} [ label="${this.weight.toFixed(2)}" ];`;
+        const weightStr = Number.isInteger(this.weight) ? this.weight.toString() : this.weight.toFixed(2);
+        return `${this.startNode} -> ${this.endNode} [ label="${weightStr}" ];`;
     }
     toString() {
         return `${this.startNode} -> ${this.endNode}: ${this.weight.toFixed(2)}`;
@@ -37,6 +38,7 @@ class Edge {
 }
 const app = (0, express_1.default)();
 app.use(body_parser_1.default.urlencoded({ extended: true }));
+app.use(body_parser_1.default.json()); // Add this line to parse JSON bodies
 // Serve static files from the src directory
 app.use(express_1.default.static(path_1.default.join(__dirname, '../src')));
 const SEARCH_COMMENT = /^(#| *$)/;
@@ -127,9 +129,13 @@ const weightsToEdges = (sortedWeights, weights) => {
     return edges;
 };
 app.post('/parse', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const input = req.body.input;
+    const { input, roundToInteger } = req.body;
+    if (!input) {
+        res.status(400).json({ error: 'Input is required' });
+        return;
+    }
     const lines = input.split('\n');
-    console.log('Input lines:', lines); // Debugging line
+    console.log('Input lines:', lines);
     const edges = [];
     const emptyNodes = [];
     const errors = [];
@@ -172,6 +178,12 @@ app.post('/parse', (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     let sortedWeights = sortWeights(weights);
     sortedWeights = removeZeroWeights(sortedWeights);
     const finalEdges = weightsToEdges(sortedWeights, weights);
+    // Apply rounding if the option is enabled
+    if (roundToInteger) {
+        finalEdges.forEach(edge => {
+            edge.weight = Math.round(edge.weight);
+        });
+    }
     const graphvizString = `digraph G {
 ${finalEdges.map(edge => edge.toGraphvizString()).join('\n')}
 }`;
