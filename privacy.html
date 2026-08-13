@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="Settle privacy policy: your shared expenses stay on your device."
+    />
+    <meta id="theme-color" name="theme-color" content="#f4f1e8" />
+    <script>
+      (() => {
+        let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        try {
+          const storedTheme = localStorage.getItem('settle-theme')
+          if (storedTheme === 'light' || storedTheme === 'dark') theme = storedTheme
+        } catch {}
+        document.documentElement.dataset.theme = theme
+        document.documentElement.style.colorScheme = theme
+        document.querySelector('#theme-color').content = theme === 'dark' ? '#101511' : '#f4f1e8'
+      })()
+    </script>
+    <link rel="icon" href="/mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/src/privacy.css" />
+    <title>Privacy — Settle</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Back to Settle">
+        <span class="brand-mark" aria-hidden="true">⇄</span>
+        <span>Settle</span>
+      </a>
+      <a class="back-link" href="./">Open app <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="privacy-title">
+        <p class="eyebrow">Privacy policy · August 13, 2026</p>
+        <h1 id="privacy-title">Your numbers stay <em>yours.</em></h1>
+        <p class="lede">
+          Settle works without an account or backend. Names, expenses, and saved history remain
+          in your browser or the app sandbox on your device.
+        </p>
+        <div class="privacy-stamp" aria-label="No account, no tracking, no data sale">
+          <span>No account</span><span>No tracking</span><span>No data sale</span>
+        </div>
+      </section>
+
+      <article class="policy">
+        <section>
+          <p class="section-number">01</p>
+          <div>
+            <h2>What Settle stores</h2>
+            <p>
+              The people, expenses, preferences, and history snapshots you enter are saved locally
+              so you can return to them later. Settle does not send this information to a Settle
+              server because there is no Settle account system or backend.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <p class="section-number">02</p>
+          <div>
+            <h2>What Settle does not collect</h2>
+            <p>
+              Settle does not include analytics, advertising, behavioral tracking, or third-party
+              data brokers. We do not collect, sell, rent, or use your expense data for profiling.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <p class="section-number">03</p>
+          <div>
+            <h2>Exports and sharing</h2>
+            <p>
+              Settle creates payment text and images only when you ask it to. If you use the system
+              share sheet, the recipient or service you choose receives that export and handles it
+              under its own privacy terms.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <p class="section-number">04</p>
+          <div>
+            <h2>Deletion and device backups</h2>
+            <p>
+              Delete individual history snapshots inside Settle. Clearing the site or app data, or
+              uninstalling the app, removes its local data. Browser and iOS backups may follow your
+              device settings; the Android app disables system backup.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <p class="section-number">05</p>
+          <div>
+            <h2>Distribution services</h2>
+            <p>
+              Apple, GitHub, Vercel, your browser, or your network provider may process ordinary
+              store, download, or access information independently. Their practices are outside
+              Settle and governed by their own policies.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <p class="section-number">06</p>
+          <div>
+            <h2>Questions</h2>
+            <p>
+              If you have a privacy question or believe something is not working as described,
+              <a href="https://github.com/xingfanxia/simplify-debts-js/issues/new">open an issue</a>
+              in the Settle repository.
+            </p>
+          </div>
+        </section>
+      </article>
+    </main>
+
+    <footer>
+      <p>Simple settlements. Private by default.</p>
+      <a href="./">Back to Settle <span aria-hidden="true">→</span></a>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,276 @@
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/instrument-sans';
+
+:root {
+  font-family: 'Instrument Sans Variable', 'Avenir Next', sans-serif;
+  color: #18231c;
+  background: #f4f1e8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --ink: #18231c;
+  --muted: #5e695f;
+  --paper: #f4f1e8;
+  --surface: #fbfaf6;
+  --line: #d2d3c8;
+  --acid: #d8ff62;
+  --accent: #ff7d61;
+  --grid: rgb(24 35 28 / 4%);
+}
+
+:root[data-theme='dark'] {
+  color: #edf4eb;
+  background: #101511;
+  --ink: #edf4eb;
+  --muted: #a8b3aa;
+  --paper: #101511;
+  --surface: #171d18;
+  --line: #344036;
+  --acid: #d8ff62;
+  --accent: #ff8b72;
+  --grid: rgb(237 244 235 / 5%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.topbar,
+main,
+footer {
+  width: min(1120px, calc(100% - 48px));
+  margin-inline: auto;
+}
+
+.topbar {
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand,
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.brand {
+  font-family: 'Bricolage Grotesque Variable', sans-serif;
+  font-size: 1.25rem;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #18231c;
+  background: var(--acid);
+  font-size: 1.2rem;
+}
+
+.back-link {
+  font-size: 0.9rem;
+}
+
+.hero {
+  padding: clamp(72px, 12vw, 150px) 0 clamp(64px, 10vw, 120px);
+  border-bottom: 1px solid var(--line);
+}
+
+.eyebrow,
+.section-number {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 760;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  font-family: 'Bricolage Grotesque Variable', sans-serif;
+  letter-spacing: -0.045em;
+}
+
+h1 {
+  max-width: 900px;
+  margin: 20px 0 28px;
+  font-size: clamp(3.3rem, 9vw, 7.5rem);
+  line-height: 0.9;
+}
+
+h1 em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.lede {
+  max-width: 690px;
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  line-height: 1.55;
+}
+
+.privacy-stamp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 38px;
+}
+
+.privacy-stamp span {
+  padding: 10px 15px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.privacy-stamp span:first-child {
+  color: #18231c;
+  border-color: var(--acid);
+  background: var(--acid);
+}
+
+.policy section {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 680px);
+  gap: clamp(24px, 5vw, 72px);
+  padding: clamp(44px, 7vw, 76px) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.policy h2 {
+  margin: -7px 0 16px;
+  font-size: clamp(1.8rem, 3.5vw, 2.75rem);
+  line-height: 1.05;
+}
+
+.policy p:not(.section-number) {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.08rem;
+  line-height: 1.72;
+}
+
+.policy a {
+  color: var(--ink);
+  font-weight: 680;
+}
+
+footer {
+  min-height: 170px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+footer a {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .topbar,
+  main,
+  footer {
+    width: min(100% - 32px, 1120px);
+  }
+
+  .topbar {
+    min-height: 72px;
+  }
+
+  .back-link {
+    font-size: 0.82rem;
+  }
+
+  .hero {
+    padding: 64px 0 58px;
+  }
+
+  h1 {
+    margin-top: 16px;
+    font-size: clamp(3.25rem, 18vw, 5rem);
+  }
+
+  .lede {
+    font-size: 1.08rem;
+  }
+
+  .privacy-stamp {
+    gap: 8px;
+    margin-top: 30px;
+  }
+
+  .privacy-stamp span {
+    padding: 8px 11px;
+    font-size: 0.73rem;
+  }
+
+  .policy section {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 46px 0 50px;
+  }
+
+  .policy h2 {
+    margin-top: 0;
+    font-size: 2rem;
+  }
+
+  .policy p:not(.section-number) {
+    font-size: 1rem;
+    line-height: 1.66;
+  }
+
+  footer {
+    min-height: 150px;
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  footer p {
+    margin: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
