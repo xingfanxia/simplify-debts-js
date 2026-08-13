@@ -27,3 +27,10 @@ export interface AppState {
   currency: Currency
   roundToWhole: boolean
 }
+
+export interface HistoryEntry {
+  id: string
+  title: string
+  savedAt: string
+  state: AppState
+}

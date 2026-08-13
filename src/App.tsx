@@ -1,13 +1,21 @@
 import { useEffect, useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+import { Clipboard as NativeClipboard } from '@capacitor/clipboard'
+import { Capacitor } from '@capacitor/core'
+import { Directory, Filesystem } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import {
   ArrowDownRight,
   ArrowRight,
+  BookmarkPlus,
+  CalendarDays,
   Check,
   ChevronDown,
   Copy,
   CodeXml,
   Download,
   FileText,
+  FolderOpen,
+  History as HistoryIcon,
   Image as ImageIcon,
   LockKeyhole,
   Moon,
@@ -25,19 +33,20 @@ import {
 } from 'lucide-react'
 import { calculateBalances, simplifyDebts } from './lib/debts'
 import { createPaymentChartBlob, formatSettlementPlan } from './lib/export'
-import { CURRENCIES, type AppState, type Currency, type Expense, type Participant, type Transfer } from './types'
+import {
+  createHistoryEntry,
+  EMPTY_STATE,
+  loadCurrentState,
+  loadHistory,
+  saveCurrentState,
+  saveHistory,
+} from './lib/storage'
+import { CURRENCIES, type AppState, type Currency, type Expense, type HistoryEntry, type Participant, type Transfer } from './types'
 
-const STORAGE_KEY = 'settle-app-state-v2'
 const THEME_STORAGE_KEY = 'settle-theme'
+const IS_NATIVE = Capacitor.isNativePlatform()
 
 type Theme = 'light' | 'dark'
-
-const EMPTY_STATE: AppState = {
-  participants: [],
-  expenses: [],
-  currency: 'USD',
-  roundToWhole: false,
-}
 
 const EXAMPLE_STATE: AppState = {
   participants: [
@@ -73,63 +82,23 @@ const EXAMPLE_STATE: AppState = {
   roundToWhole: false,
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-function loadState(): AppState {
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY)
-    if (!stored) return EMPTY_STATE
-
-    const value: unknown = JSON.parse(stored)
-    if (!isRecord(value) || !Array.isArray(value.participants) || !Array.isArray(value.expenses)) {
-      return EMPTY_STATE
-    }
-
-    const participants: Participant[] = value.participants.filter(
-      (participant): participant is Participant =>
-        isRecord(participant) &&
-        typeof participant.id === 'string' &&
-        typeof participant.name === 'string' &&
-        participant.id.length > 0 &&
-        participant.name.trim().length > 0,
-    )
-    const participantIds = new Set(participants.map(({ id }) => id))
-    const expenses: Expense[] = value.expenses.filter(
-      (expense): expense is Expense =>
-        isRecord(expense) &&
-        typeof expense.id === 'string' &&
-        typeof expense.description === 'string' &&
-        typeof expense.paidBy === 'string' &&
-        participantIds.has(expense.paidBy) &&
-        typeof expense.amountCents === 'number' &&
-        Number.isInteger(expense.amountCents) &&
-        expense.amountCents > 0 &&
-        Array.isArray(expense.splitWith) &&
-        expense.splitWith.every((id) => typeof id === 'string' && participantIds.has(id)),
-    )
-    const currency = CURRENCIES.includes(value.currency as Currency)
-      ? (value.currency as Currency)
-      : 'USD'
-
-    return {
-      participants,
-      expenses,
-      currency,
-      roundToWhole: value.roundToWhole === true,
-    }
-  } catch {
-    return EMPTY_STATE
-  }
-}
-
 function loadTheme(): Theme {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
 }
 
 function makeId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result)
+      : reject(new Error('Could not encode image'))
+    reader.onerror = () => reject(reader.error ?? new Error('Could not encode image'))
+    reader.readAsDataURL(blob)
+  })
 }
 
 function initials(name: string): string {
@@ -471,8 +440,141 @@ function ExpenseComposer({
   )
 }
 
+interface HistoryDrawerProps {
+  entries: HistoryEntry[]
+  currentState: AppState
+  notice: string
+  onClose: () => void
+  onDelete: (entry: HistoryEntry) => void
+  onOpen: (entry: HistoryEntry) => void
+  onSave: (title: string) => boolean
+}
+
+function suggestedHistoryTitle(state: AppState): string {
+  const firstExpense = state.expenses[0]?.description.trim()
+  if (!firstExpense) return ''
+  const remainder = state.expenses.length - 1
+  return remainder > 0 ? `${firstExpense} + ${remainder} more` : firstExpense
+}
+
+function historyEntryTotal(entry: HistoryEntry): number {
+  return entry.state.expenses.reduce((sum, expense) => sum + expense.amountCents, 0)
+}
+
+function HistoryDrawer({
+  entries,
+  currentState,
+  notice,
+  onClose,
+  onDelete,
+  onOpen,
+  onSave,
+}: HistoryDrawerProps) {
+  const [title, setTitle] = useState(() => suggestedHistoryTitle(currentState))
+  const hasCurrentPlan = currentState.expenses.length > 0
+
+  function submitHistory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const fallback = `Settlement · ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date())}`
+    if (onSave(title.trim() || fallback)) setTitle('')
+  }
+
+  return (
+    <div className="history-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <aside className="history-drawer" role="dialog" aria-modal="true" aria-labelledby="history-title">
+        <header className="history-drawer__header">
+          <div>
+            <p className="eyebrow eyebrow--small"><span /> On this device</p>
+            <h2 id="history-title">Saved settlements</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close history"><X size={19} /></button>
+        </header>
+
+        <form className="history-save" onSubmit={submitHistory}>
+          <div className="history-save__icon"><BookmarkPlus size={20} /></div>
+          <div className="history-save__copy">
+            <strong>Save this settlement</strong>
+            <span>Keep a local snapshot you can reopen later.</span>
+          </div>
+          <label>
+            <span className="sr-only">Settlement name</span>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Weekend trip, apartment bills…"
+              maxLength={80}
+              disabled={!hasCurrentPlan}
+            />
+          </label>
+          <button className="primary-button" type="submit" disabled={!hasCurrentPlan}>
+            <BookmarkPlus size={17} /> Save locally
+          </button>
+          {!hasCurrentPlan && <p>Add an expense before saving this settlement.</p>}
+          <span className="history-notice" role="status">{notice}</span>
+        </form>
+
+        <section className="history-library" aria-labelledby="history-library-title">
+          <div className="history-library__heading">
+            <h3 id="history-library-title">History</h3>
+            <span>{entries.length} / 50 saved</span>
+          </div>
+
+          {entries.length === 0 ? (
+            <div className="history-empty">
+              <HistoryIcon size={24} />
+              <strong>No saved settlements yet</strong>
+              <p>Saved plans stay in this browser and appear here.</p>
+            </div>
+          ) : (
+            <div className="history-list">
+              {entries.map((entry) => {
+                const formatter = new Intl.NumberFormat(undefined, {
+                  style: 'currency',
+                  currency: entry.state.currency,
+                })
+                return (
+                  <article className="history-entry" key={entry.id}>
+                    <div className="history-entry__topline">
+                      <div className="history-entry__date"><CalendarDays size={13} /> {new Intl.DateTimeFormat(undefined, {
+                        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+                      }).format(new Date(entry.savedAt))}</div>
+                      <button type="button" onClick={() => onDelete(entry)} aria-label={`Delete ${entry.title}`}>
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                    <h4>{entry.title}</h4>
+                    <div className="history-entry__stats">
+                      <strong>{formatter.format(historyEntryTotal(entry) / 100)}</strong>
+                      <span>{entry.state.participants.length} people</span>
+                      <span>{entry.state.expenses.length} {entry.state.expenses.length === 1 ? 'expense' : 'expenses'}</span>
+                    </div>
+                    <div className="history-entry__footer">
+                      <div className="history-entry__people" aria-label={entry.state.participants.map(({ name }) => name).join(', ')}>
+                        {entry.state.participants.slice(0, 5).map((person) => <PersonAvatar key={person.id} person={person} small />)}
+                        {entry.state.participants.length > 5 && <span>+{entry.state.participants.length - 5}</span>}
+                      </div>
+                      <button className="history-open-button" type="button" onClick={() => onOpen(entry)}>
+                        <FolderOpen size={15} /> Open plan
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        <p className="history-privacy"><LockKeyhole size={13} /> Nothing here is uploaded or synced.</p>
+      </aside>
+    </div>
+  )
+}
+
 export default function App() {
-  const [state, setState] = useState<AppState>(loadState)
+  const [state, setState] = useState<AppState>(loadCurrentState)
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>(loadHistory)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyNotice, setHistoryNotice] = useState('')
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [nameInput, setNameInput] = useState('')
   const [peopleError, setPeopleError] = useState('')
@@ -481,8 +583,25 @@ export default function App() {
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null)
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    try {
+      saveCurrentState(state)
+    } catch {
+      // The active workspace continues to work even when device storage is unavailable.
+    }
   }, [state])
+
+  useEffect(() => {
+    if (!historyOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setHistoryOpen(false)
+    }
+    document.body.classList.add('has-modal')
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.classList.remove('has-modal')
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [historyOpen])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -597,6 +716,46 @@ export default function App() {
     setEditingExpenseId(null)
   }
 
+  function saveCurrentToHistory(title: string): boolean {
+    if (state.expenses.length === 0) return false
+    const entry = createHistoryEntry(state, title)
+    const nextEntries = [entry, ...historyEntries].slice(0, 50)
+    try {
+      saveHistory(nextEntries)
+      setHistoryEntries(nextEntries)
+      setHistoryNotice('Saved on this device')
+      window.setTimeout(() => setHistoryNotice(''), 2200)
+      return true
+    } catch {
+      setHistoryNotice('Could not access local storage')
+      return false
+    }
+  }
+
+  function openHistoryEntry(entry: HistoryEntry) {
+    if (
+      state.expenses.length > 0 &&
+      !window.confirm(`Open “${entry.title}”? This replaces the current workspace. Save it first if you want to keep it.`)
+    ) return
+
+    setState(structuredClone(entry.state))
+    setEditingExpenseId(null)
+    setHistoryOpen(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function deleteHistoryEntry(entry: HistoryEntry) {
+    if (!window.confirm(`Delete “${entry.title}” from this device?`)) return
+    const nextEntries = historyEntries.filter(({ id }) => id !== entry.id)
+    try {
+      saveHistory(nextEntries)
+      setHistoryEntries(nextEntries)
+      setHistoryNotice('Deleted')
+    } catch {
+      setHistoryNotice('Could not update local storage')
+    }
+  }
+
   function plainTextPlan(): string {
     return formatSettlementPlan({
       participants: state.participants,
@@ -627,7 +786,9 @@ export default function App() {
       textArea.remove()
     }
     try {
-      if (navigator.clipboard?.writeText) {
+      if (IS_NATIVE) {
+        await NativeClipboard.write({ string: plan, label: 'Settlement plan' })
+      } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(plan)
       } else {
         copyWithTextArea()
@@ -652,11 +813,18 @@ export default function App() {
   async function copyPaymentChart() {
     setExportBusy(true)
     try {
-      if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
-        throw new Error('Image clipboard is unavailable')
-      }
       const blob = await paymentChartBlob()
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      if (IS_NATIVE) {
+        await NativeClipboard.write({
+          image: await blobToDataUrl(blob),
+          label: 'Settle payment chart',
+        })
+      } else {
+        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+          throw new Error('Image clipboard is unavailable')
+        }
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      }
       closeExportMenu()
       showExportNotice('Chart copied')
     } catch {
@@ -671,14 +839,29 @@ export default function App() {
     setExportBusy(true)
     try {
       const blob = await paymentChartBlob()
-      const objectUrl = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = objectUrl
-      link.download = 'settle-payment-plan-mobile.png'
-      link.click()
-      URL.revokeObjectURL(objectUrl)
+      if (IS_NATIVE) {
+        const dataUrl = await blobToDataUrl(blob)
+        const result = await Filesystem.writeFile({
+          path: 'settle-payment-plan-mobile.png',
+          data: dataUrl.slice(dataUrl.indexOf(',') + 1),
+          directory: Directory.Cache,
+        })
+        await Share.share({
+          title: 'Settlement plan',
+          text: 'Payment plan from Settle',
+          files: [result.uri],
+          dialogTitle: 'Share or save payment chart',
+        })
+      } else {
+        const objectUrl = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.download = 'settle-payment-plan-mobile.png'
+        link.click()
+        URL.revokeObjectURL(objectUrl)
+      }
       closeExportMenu()
-      showExportNotice('PNG downloaded')
+      showExportNotice(IS_NATIVE ? 'Chart ready to share' : 'PNG downloaded')
     } catch {
       closeExportMenu()
       showExportNotice('Could not create the chart')
@@ -696,6 +879,11 @@ export default function App() {
         </a>
         <div className="topbar__actions">
           <span className="privacy-note"><LockKeyhole size={14} /> Stays on this device</span>
+          <button className="history-button" type="button" onClick={() => setHistoryOpen(true)} aria-label="History">
+            <HistoryIcon size={16} />
+            <span>History</span>
+            {historyEntries.length > 0 && <b>{historyEntries.length}</b>}
+          </button>
           <label className="currency-picker">
             <span className="sr-only">Currency</span>
             <select
@@ -863,9 +1051,12 @@ export default function App() {
                         <Copy size={14} />
                       </button>
                       <button type="button" onClick={downloadPaymentChart} disabled={exportBusy}>
-                        <span><Download size={17} /></span>
-                        <span><strong>Download PNG</strong><small>2160 × 2700 mobile PNG</small></span>
-                        <Download size={14} />
+                        <span>{IS_NATIVE ? <Share2 size={17} /> : <Download size={17} />}</span>
+                        <span>
+                          <strong>{IS_NATIVE ? 'Share / save PNG' : 'Download PNG'}</strong>
+                          <small>Readable portrait payment card</small>
+                        </span>
+                        {IS_NATIVE ? <Share2 size={14} /> : <Download size={14} />}
                       </button>
                     </div>
                   </details>
@@ -954,6 +1145,18 @@ export default function App() {
           <CodeXml size={17} /> View source
         </a>
       </footer>
+
+      {historyOpen && (
+        <HistoryDrawer
+          entries={historyEntries}
+          currentState={state}
+          notice={historyNotice}
+          onClose={() => setHistoryOpen(false)}
+          onDelete={deleteHistoryEntry}
+          onOpen={openHistoryEntry}
+          onSave={saveCurrentToHistory}
+        />
+      )}
     </div>
   )
 }

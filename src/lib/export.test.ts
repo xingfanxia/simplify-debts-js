@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Participant, Transfer } from '../types'
-import { formatSettlementPlan } from './export'
+import { formatSettlementPlan, PAYMENT_CHART_LAYOUT } from './export'
 
 describe('settlement export', () => {
   it('formats a scannable directional payment plan', () => {
@@ -19,5 +19,13 @@ describe('settlement export', () => {
       transfers,
       formatMoney: (amountCents) => `$${(amountCents / 100).toFixed(2)}`,
     })).toBe('Settlement plan\n\nxiao → hao · $59.00\nax → hao · $22.00')
+  })
+
+  it('keeps payment names and amounts readable when the chart is fit to a 390px phone', () => {
+    const phoneScale = 390 / PAYMENT_CHART_LAYOUT.logicalWidth
+
+    expect(PAYMENT_CHART_LAYOUT.logicalWidth * PAYMENT_CHART_LAYOUT.scale).toBe(1440)
+    expect(PAYMENT_CHART_LAYOUT.paymentNameFontSize * phoneScale).toBeGreaterThanOrEqual(16)
+    expect(PAYMENT_CHART_LAYOUT.paymentAmountFontSize * phoneScale).toBeGreaterThanOrEqual(20)
   })
 })
