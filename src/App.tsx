@@ -3,13 +3,20 @@ import {
   ArrowDownRight,
   ArrowRight,
   Check,
+  ChevronDown,
   Copy,
   CodeXml,
+  Download,
+  FileText,
+  Image as ImageIcon,
   LockKeyhole,
   Moon,
+  PencilLine,
   Plus,
   ReceiptText,
   RotateCcw,
+  Save,
+  Share2,
   Sun,
   Trash2,
   UsersRound,
@@ -17,6 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import { calculateBalances, simplifyDebts } from './lib/debts'
+import { createPaymentChartBlob, formatSettlementPlan } from './lib/export'
 import { CURRENCIES, type AppState, type Currency, type Expense, type Participant, type Transfer } from './types'
 
 const STORAGE_KEY = 'settle-app-state-v2'
@@ -234,16 +242,49 @@ function SettlementDiagram({ participants, transfers, formatMoney }: SettlementD
 interface ExpenseComposerProps {
   participants: Participant[]
   currency: Currency
+  editingExpense: Expense | null
   onAdd: (expense: Expense) => void
+  onUpdate: (expense: Expense) => void
+  onCancelEdit: () => void
 }
 
-function ExpenseComposer({ participants, currency, onAdd }: ExpenseComposerProps) {
+function ExpenseComposer({
+  participants,
+  currency,
+  editingExpense,
+  onAdd,
+  onUpdate,
+  onCancelEdit,
+}: ExpenseComposerProps) {
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [paidBy, setPaidBy] = useState(participants[0]?.id ?? '')
   const [splitMode, setSplitMode] = useState<'everyone' | 'custom'>('everyone')
   const [selectedIds, setSelectedIds] = useState<string[]>(participants.map(({ id }) => id))
   const [error, setError] = useState('')
+
+  function resetComposer() {
+    setDescription('')
+    setAmount('')
+    setPaidBy(participants[0]?.id ?? '')
+    setSplitMode('everyone')
+    setSelectedIds(participants.map(({ id }) => id))
+    setError('')
+  }
+
+  useEffect(() => {
+    if (!editingExpense) return
+
+    const includesEveryone =
+      editingExpense.splitWith.length === participants.length &&
+      participants.every(({ id }) => editingExpense.splitWith.includes(id))
+    setDescription(editingExpense.description)
+    setAmount((editingExpense.amountCents / 100).toFixed(2))
+    setPaidBy(editingExpense.paidBy)
+    setSplitMode(includesEveryone ? 'everyone' : 'custom')
+    setSelectedIds(editingExpense.splitWith)
+    setError('')
+  }, [editingExpense, participants])
 
   useEffect(() => {
     if (!participants.some(({ id }) => id === paidBy)) {
@@ -282,18 +323,20 @@ function ExpenseComposer({ participants, currency, onAdd }: ExpenseComposerProps
       return
     }
 
-    onAdd({
-      id: makeId('expense'),
+    const expense = {
+      id: editingExpense?.id ?? makeId('expense'),
       description: description.trim() || 'Shared expense',
       paidBy,
       amountCents,
       splitWith,
-    })
-    setDescription('')
-    setAmount('')
-    setSplitMode('everyone')
-    setSelectedIds(participants.map(({ id }) => id))
-    setError('')
+    }
+
+    if (editingExpense) {
+      onUpdate(expense)
+    } else {
+      onAdd(expense)
+    }
+    resetComposer()
   }
 
   function toggleParticipant(participantId: string) {
@@ -305,7 +348,26 @@ function ExpenseComposer({ participants, currency, onAdd }: ExpenseComposerProps
   }
 
   return (
-    <form className="expense-composer" onSubmit={submitExpense}>
+    <form
+      id="expense-composer"
+      className={editingExpense ? 'expense-composer is-editing' : 'expense-composer'}
+      onSubmit={submitExpense}
+    >
+      {editingExpense && (
+        <div className="edit-notice" role="status">
+          <PencilLine size={16} aria-hidden="true" />
+          <span>Editing <strong>{editingExpense.description}</strong></span>
+          <button
+            type="button"
+            onClick={() => {
+              resetComposer()
+              onCancelEdit()
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       <div className="field-grid">
         <label className="field field--description">
           <span>What was it?</span>
@@ -386,10 +448,24 @@ function ExpenseComposer({ participants, currency, onAdd }: ExpenseComposerProps
 
       <div className="composer-footer">
         <p className="form-error" role="alert">{error}</p>
-        <button className="primary-button" type="submit">
-          <Plus size={18} strokeWidth={2.5} />
-          Add expense
-        </button>
+        <div className="composer-actions">
+          {editingExpense && (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                resetComposer()
+                onCancelEdit()
+              }}
+            >
+              Cancel
+            </button>
+          )}
+          <button className="primary-button" type="submit">
+            {editingExpense ? <Save size={17} /> : <Plus size={18} strokeWidth={2.5} />}
+            {editingExpense ? 'Save changes' : 'Add expense'}
+          </button>
+        </div>
       </div>
     </form>
   )
@@ -400,7 +476,9 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [nameInput, setNameInput] = useState('')
   const [peopleError, setPeopleError] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [exportNotice, setExportNotice] = useState('')
+  const [exportBusy, setExportBusy] = useState(false)
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -420,6 +498,7 @@ export default function App() {
     () => new Map(state.participants.map((person) => [person.id, person])),
     [state.participants],
   )
+  const editingExpense = state.expenses.find(({ id }) => id === editingExpenseId) ?? null
   const transfers = useMemo(
     () => simplifyDebts(state.participants, state.expenses, state.roundToWhole),
     [state.participants, state.expenses, state.roundToWhole],
@@ -485,11 +564,29 @@ export default function App() {
     setState((current) => ({ ...current, expenses: [expense, ...current.expenses] }))
   }
 
+  function updateExpense(expense: Expense) {
+    setState((current) => ({
+      ...current,
+      expenses: current.expenses.map((currentExpense) =>
+        currentExpense.id === expense.id ? expense : currentExpense,
+      ),
+    }))
+    setEditingExpenseId(null)
+  }
+
+  function editExpense(expenseId: string) {
+    setEditingExpenseId(expenseId)
+    window.requestAnimationFrame(() => {
+      document.querySelector('#expense-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+
   function removeExpense(expenseId: string) {
     setState((current) => ({
       ...current,
       expenses: current.expenses.filter(({ id }) => id !== expenseId),
     }))
+    if (editingExpenseId === expenseId) setEditingExpenseId(null)
   }
 
   function resetApp() {
@@ -497,15 +594,28 @@ export default function App() {
     setState(EMPTY_STATE)
     setNameInput('')
     setPeopleError('')
+    setEditingExpenseId(null)
+  }
+
+  function plainTextPlan(): string {
+    return formatSettlementPlan({
+      participants: state.participants,
+      transfers,
+      formatMoney,
+    })
+  }
+
+  function closeExportMenu() {
+    document.querySelector<HTMLDetailsElement>('.export-menu')?.removeAttribute('open')
+  }
+
+  function showExportNotice(message: string) {
+    setExportNotice(message)
+    window.setTimeout(() => setExportNotice(''), 2200)
   }
 
   async function copyPlan() {
-    const lines = transfers.map((transfer) => {
-      const from = peopleById.get(transfer.from)?.name ?? 'Someone'
-      const to = peopleById.get(transfer.to)?.name ?? 'someone'
-      return `${from} pays ${to} ${formatMoney(transfer.amountCents)}`
-    })
-    const plan = `Settlement plan\n${lines.join('\n')}`
+    const plan = plainTextPlan()
     const copyWithTextArea = () => {
       const textArea = document.createElement('textarea')
       textArea.value = plan
@@ -525,8 +635,56 @@ export default function App() {
     } catch {
       copyWithTextArea()
     }
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+    closeExportMenu()
+    showExportNotice('Text copied')
+  }
+
+  async function paymentChartBlob(): Promise<Blob> {
+    return createPaymentChartBlob({
+      participants: activeParticipants,
+      transfers,
+      theme,
+      currency: state.currency,
+      formatMoney,
+    })
+  }
+
+  async function copyPaymentChart() {
+    setExportBusy(true)
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+        throw new Error('Image clipboard is unavailable')
+      }
+      const blob = await paymentChartBlob()
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      closeExportMenu()
+      showExportNotice('Chart copied')
+    } catch {
+      closeExportMenu()
+      showExportNotice('Use Download PNG in this browser')
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  async function downloadPaymentChart() {
+    setExportBusy(true)
+    try {
+      const blob = await paymentChartBlob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = 'settle-payment-plan.png'
+      link.click()
+      URL.revokeObjectURL(objectUrl)
+      closeExportMenu()
+      showExportNotice('PNG downloaded')
+    } catch {
+      closeExportMenu()
+      showExportNotice('Could not create the chart')
+    } finally {
+      setExportBusy(false)
+    }
   }
 
   return (
@@ -627,7 +785,14 @@ export default function App() {
                 </div>
               </div>
 
-              <ExpenseComposer participants={state.participants} currency={state.currency} onAdd={addExpense} />
+              <ExpenseComposer
+                participants={state.participants}
+                currency={state.currency}
+                editingExpense={editingExpense}
+                onAdd={addExpense}
+                onUpdate={updateExpense}
+                onCancelEdit={() => setEditingExpenseId(null)}
+              />
 
               {state.expenses.length > 0 && (
                 <div className="expense-history">
@@ -644,16 +809,24 @@ export default function App() {
                       const isEveryone = expense.splitWith.length === state.participants.length
 
                       return (
-                        <article className="expense-row" key={expense.id}>
+                        <article
+                          className={editingExpenseId === expense.id ? 'expense-row is-editing' : 'expense-row'}
+                          key={expense.id}
+                        >
                           <div className="expense-row__icon"><ReceiptText size={18} /></div>
                           <div className="expense-row__body">
                             <strong>{expense.description}</strong>
                             <span>{payer?.name} paid · {isEveryone ? 'split with everyone' : `split with ${splitNames.join(', ')}`}</span>
                           </div>
                           <strong className="expense-row__amount">{formatMoney(expense.amountCents)}</strong>
-                          <button type="button" onClick={() => removeExpense(expense.id)} aria-label={`Remove ${expense.description}`}>
-                            <Trash2 size={16} />
-                          </button>
+                          <div className="expense-row__actions">
+                            <button type="button" onClick={() => editExpense(expense.id)} aria-label={`Edit ${expense.description}`}>
+                              <PencilLine size={16} />
+                            </button>
+                            <button type="button" onClick={() => removeExpense(expense.id)} aria-label={`Remove ${expense.description}`}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </article>
                       )
                     })}
@@ -671,10 +844,31 @@ export default function App() {
                   <h2 id="settlement-title">Settlement plan</h2>
                 </div>
                 {transfers.length > 0 && (
-                  <button className="copy-button" type="button" onClick={copyPlan}>
-                    {copied ? <Check size={15} /> : <Copy size={15} />}
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
+                  <details className="export-menu">
+                    <summary className="export-button">
+                      {exportNotice ? <Check size={15} /> : <Share2 size={15} />}
+                      <span aria-live="polite">{exportNotice || 'Export'}</span>
+                      {!exportNotice && <ChevronDown size={14} className="export-button__chevron" />}
+                    </summary>
+                    <div className="export-menu__popover">
+                      <p>Share settlement</p>
+                      <button type="button" onClick={copyPlan} disabled={exportBusy}>
+                        <span><FileText size={17} /></span>
+                        <span><strong>Copy text</strong><small>Names, arrows, amounts</small></span>
+                        <Copy size={14} />
+                      </button>
+                      <button type="button" onClick={copyPaymentChart} disabled={exportBusy}>
+                        <span><ImageIcon size={17} /></span>
+                        <span><strong>Copy chart</strong><small>Paste a high-res image</small></span>
+                        <Copy size={14} />
+                      </button>
+                      <button type="button" onClick={downloadPaymentChart} disabled={exportBusy}>
+                        <span><Download size={17} /></span>
+                        <span><strong>Download PNG</strong><small>Save the payment graph</small></span>
+                        <Download size={14} />
+                      </button>
+                    </div>
+                  </details>
                 )}
               </div>
 
@@ -714,7 +908,7 @@ export default function App() {
                         <div className="transfer-row" key={`${transfer.from}-${transfer.to}`} style={{ '--delay': `${index * 70}ms` } as CSSProperties}>
                           <PersonAvatar person={from} small />
                           <div className="transfer-row__sentence">
-                            <span><strong>{from.name}</strong> pays {to.name}</span>
+                            <span><strong>{from.name}</strong><b aria-hidden="true">→</b><strong>{to.name}</strong></span>
                             <small>One payment, then you’re square</small>
                           </div>
                           <ArrowDownRight size={17} aria-hidden="true" />

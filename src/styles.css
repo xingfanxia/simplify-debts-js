@@ -554,6 +554,47 @@ main {
   background: var(--surface-muted);
   border: 1px solid var(--surface-border);
   border-radius: 16px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.expense-composer.is-editing {
+  border-color: var(--acid-dark);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acid) 16%, transparent);
+}
+
+.edit-notice {
+  min-height: 40px;
+  margin: -5px -5px 18px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-ink);
+  background: var(--acid);
+  border: 1px solid var(--acid-dark);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.edit-notice span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-notice strong {
+  font-weight: 760;
+}
+
+.edit-notice button {
+  margin-left: auto;
+  padding: 3px 1px;
+  color: inherit;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 760;
+  border-bottom: 1px solid currentColor;
 }
 
 .field-grid {
@@ -721,6 +762,30 @@ main {
   align-self: center;
 }
 
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.secondary-button {
+  height: 43px;
+  padding: 0 14px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--control-border);
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.secondary-button:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+  border-color: var(--line-dark);
+}
+
 .primary-button {
   height: 43px;
   padding: 0 17px;
@@ -771,11 +836,17 @@ main {
 .expense-row {
   min-height: 72px;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto 31px;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 11px;
   border-bottom: 1px solid var(--line);
   animation: row-in 320ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.expense-row.is-editing {
+  padding-inline: 8px 4px;
+  background: color-mix(in srgb, var(--acid) 9%, transparent);
+  box-shadow: inset 3px 0 var(--acid-dark);
 }
 
 @keyframes row-in {
@@ -820,7 +891,13 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
-.expense-row > button {
+.expense-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.expense-row__actions button {
   width: 30px;
   height: 30px;
   display: grid;
@@ -830,7 +907,12 @@ main {
   border-radius: 8px;
 }
 
-.expense-row > button:hover {
+.expense-row__actions button:first-child:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.expense-row__actions button:last-child:hover {
   color: var(--danger);
   background: var(--danger-surface);
 }
@@ -848,6 +930,7 @@ main {
 }
 
 .settlement-card__header {
+  position: relative;
   min-height: 106px;
   display: flex;
   align-items: center;
@@ -867,7 +950,16 @@ main {
   font-size: 30px;
 }
 
-.copy-button {
+.export-menu {
+  position: relative;
+  z-index: 5;
+}
+
+.export-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.export-button {
   height: 36px;
   padding: 0 12px;
   display: inline-flex;
@@ -878,11 +970,104 @@ main {
   border-radius: 9px;
   font-size: 12px;
   font-weight: 670;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
 }
 
-.copy-button:hover {
+.export-button:hover,
+.export-menu[open] .export-button {
   color: var(--ink);
   background: var(--surface-hover);
+}
+
+.export-button__chevron {
+  transition: transform 160ms ease;
+}
+
+.export-menu[open] .export-button__chevron {
+  transform: rotate(180deg);
+}
+
+.export-menu__popover {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  width: 264px;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--paper-bright);
+  border: 1px solid var(--line-dark);
+  border-radius: 13px;
+  box-shadow: 0 18px 45px rgb(0 0 0 / 18%);
+  animation: export-menu-in 150ms ease-out both;
+}
+
+@keyframes export-menu-in {
+  from { opacity: 0; transform: translateY(-5px) scale(.985); }
+}
+
+.export-menu__popover > p {
+  margin: 4px 8px 6px;
+  color: var(--muted-soft);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.export-menu__popover button {
+  width: 100%;
+  min-height: 58px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  background: transparent;
+  border-radius: 9px;
+  text-align: left;
+  transition: background 140ms ease;
+}
+
+.export-menu__popover button:hover {
+  background: var(--surface-hover);
+}
+
+.export-menu__popover button:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.export-menu__popover button > span:first-child {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: var(--accent-ink);
+  background: var(--acid);
+  border-radius: 9px 9px 9px 3px;
+}
+
+.export-menu__popover button > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.export-menu__popover strong {
+  font-size: 12px;
+  font-weight: 730;
+}
+
+.export-menu__popover small {
+  color: var(--muted-soft);
+  font-size: 10px;
+}
+
+.export-menu__popover button > svg {
+  color: var(--muted-soft);
 }
 
 .result-empty {
@@ -1100,6 +1285,12 @@ main {
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.transfer-row__sentence b {
+  margin: 0 6px;
+  color: var(--acid-dark);
+  font-size: 14px;
 }
 
 .transfer-row__sentence strong {
@@ -1432,13 +1623,18 @@ footer > a:hover {
     display: grid;
   }
 
-  .primary-button {
+  .composer-actions {
     width: 100%;
+  }
+
+  .composer-actions .primary-button {
+    width: auto;
+    flex: 1;
     justify-content: center;
   }
 
   .expense-row {
-    grid-template-columns: 33px minmax(0, 1fr) auto 27px;
+    grid-template-columns: 33px minmax(0, 1fr) auto auto;
     gap: 8px;
   }
 
@@ -1451,8 +1647,12 @@ footer > a:hover {
     font-size: 13px;
   }
 
-  .expense-row > button {
-    width: 27px;
+  .expense-row__actions {
+    gap: 0;
+  }
+
+  .expense-row__actions button {
+    width: 26px;
     height: 27px;
   }
 

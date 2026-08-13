@@ -8,7 +8,7 @@ Settle turns a group of shared expenses into a compact repayment plan. Everythin
 - Replaced the free-form debt syntax with a guided people → expenses → settlement workflow.
 - Moved all calculations into a pure, tested domain module using integer cents.
 - Replaced server-rendered Graphviz output with an accessible live settlement view and SVG relationship diagram.
-- Added custom expense splits, multiple currencies, optional balanced whole-number rounding, copyable results, local persistence, and an example dataset.
+- Added editable expenses, custom splits, multiple currencies, optional balanced whole-number rounding, arrow-formatted text and PNG chart exports, local persistence, and an example dataset.
 - Added a persistent light/dark theme that follows the system preference on first visit.
 - Removed Express, serverless functions, CDN scripts, and the Graphviz runtime.
 
