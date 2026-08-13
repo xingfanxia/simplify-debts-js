@@ -1,30 +1,53 @@
-# Debt Simplifier
+# Settle
 
-Debt Simplifier is a web application designed to help users manage and visualize their debts more effectively. It simplifies complex debt relationships among multiple people, reducing them to the minimum number of transactions needed to settle all debts.
+Settle turns a group of shared expenses into a compact repayment plan. Everything is calculated and saved locally in the browser—no account, database, or server-side processing required.
 
-## Motivation
+## What changed in v2
 
-I created this because even though this feature already exists in the app Splitwise, not everyone has a Splitwise account and it seemed fun to implement it myself.
+- Rebuilt the product as a responsive React 19 + TypeScript application.
+- Replaced the free-form debt syntax with a guided people → expenses → settlement workflow.
+- Moved all calculations into a pure, tested domain module using integer cents.
+- Replaced server-rendered Graphviz output with an accessible live settlement view and SVG relationship diagram.
+- Added custom expense splits, multiple currencies, optional balanced whole-number rounding, copyable results, local persistence, and an example dataset.
+- Removed Express, serverless functions, CDN scripts, and the Graphviz runtime.
 
-## Features
+## Stack
 
-- **Debt Visualization**: Generates a simplified graph of debt relationships.
-- **Debt Management Tools**: Easily input and manage multiple debt entries.
-- **Interactive User Interface**: User-friendly interface for adding and removing debt entries.
-- **Group Debt Handling**: Ability to add group members who are part of the debt splitting but didn't pay.
+- React 19
+- TypeScript 6 in strict mode
+- Vite 8
+- Vitest
+- Lucide icons
+- Self-hosted variable fonts from Fontsource
+- Plain CSS with responsive layout, accessible focus states, and reduced-motion support
 
-## Live Demo
+## Development
 
-Check out the live demo of Debt Simplifier [here](https://simplify-debts-js.vercel.app/).
+Requires Node.js 20.19 or newer.
 
-## How It Works
+```bash
+npm install
+npm run dev
+```
 
-The Debt Simplifier uses a graph-based algorithm to minimize the number of transactions needed to settle all debts. Here's a brief explanation of the logic:
+Open the local URL printed by Vite.
 
-1. It creates a graph where each person is a node, and each debt is a directed edge.
-2. The algorithm then calculates the net balance for each person (total amount owed minus total amount owing).
-3. It identifies people with positive balances (net creditors) and negative balances (net debtors).
-4. The algorithm then creates new edges (transactions) from the biggest debtors to the biggest creditors, reducing the number of overall transactions.
-5. This process continues until all debts are settled.
+## Verification
 
-This approach ensures that any number of transactions among n people can always be simplified to at most n-1 transactions.
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+## How the math works
+
+Each expense is distributed in integer cents across its selected participants. Settle calculates one net balance per person, then greedily matches the largest debtors with the largest creditors. This preserves the full ledger and produces at most `n - 1` repayments for `n` people.
+
+## Privacy
+
+Participant names and expenses are stored only in the browser's local storage. There is no backend and no analytics integration.
+
+## License
+
+[MIT](./LICENSE.md)

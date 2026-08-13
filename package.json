@@ -1,22 +1,32 @@
 {
-  "name": "debt-simplifier",
-  "version": "1.0.0",
-  "main": "dist/server.js",
+  "name": "settle-debt-simplifier",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
-    "dev": "ts-node-dev api/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aduh95/viz.js": "^3.7.0",
-    "body-parser": "^1.20.2",
-    "express": "^4.19.2"
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/instrument-sans": "^5.3.0",
+    "lucide-react": "^1.31.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.7.4",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.6.2"
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.5",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
   }
 }
