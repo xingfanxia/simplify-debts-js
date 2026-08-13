@@ -674,7 +674,7 @@ export default function App() {
       const objectUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = objectUrl
-      link.download = 'settle-payment-plan.png'
+      link.download = 'settle-payment-plan-mobile.png'
       link.click()
       URL.revokeObjectURL(objectUrl)
       closeExportMenu()
@@ -859,12 +859,12 @@ export default function App() {
                       </button>
                       <button type="button" onClick={copyPaymentChart} disabled={exportBusy}>
                         <span><ImageIcon size={17} /></span>
-                        <span><strong>Copy chart</strong><small>Paste a high-res image</small></span>
+                        <span><strong>Copy chart</strong><small>Phone-ready portrait image</small></span>
                         <Copy size={14} />
                       </button>
                       <button type="button" onClick={downloadPaymentChart} disabled={exportBusy}>
                         <span><Download size={17} /></span>
-                        <span><strong>Download PNG</strong><small>Save the payment graph</small></span>
+                        <span><strong>Download PNG</strong><small>2160 × 2700 mobile PNG</small></span>
                         <Download size={14} />
                       </button>
                     </div>

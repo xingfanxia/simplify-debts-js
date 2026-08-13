@@ -14,7 +14,8 @@ interface PlainTextPlanOptions {
   formatMoney: (amountCents: number) => string
 }
 
-const CHART_WIDTH = 1200
+const CHART_WIDTH = 1080
+const MIN_CHART_HEIGHT = 1350
 const SCALE = 2
 const NODE_COLORS = ['#9ec6ff', '#ff7d61', '#95d8b2', '#c2b7eb', '#d8ff62']
 
@@ -89,7 +90,7 @@ export async function createPaymentChartBlob({
 }: PaymentChartOptions): Promise<Blob> {
   await document.fonts.ready
 
-  const chartHeight = 760 + transfers.length * 68
+  const chartHeight = Math.max(MIN_CHART_HEIGHT, 1020 + transfers.length * 88)
   const canvas = document.createElement('canvas')
   canvas.width = CHART_WIDTH * SCALE
   canvas.height = chartHeight * SCALE
@@ -137,32 +138,32 @@ export async function createPaymentChartBlob({
   }
 
   context.fillStyle = colors.ink
-  context.font = '700 48px "Bricolage Grotesque Variable", sans-serif'
-  context.fillText('Settlement plan', 70, 86)
+  context.font = '700 50px "Bricolage Grotesque Variable", sans-serif'
+  context.fillText('Settlement plan', 64, 88)
   context.fillStyle = colors.muted
   context.font = '600 17px "Instrument Sans Variable", sans-serif'
   context.fillText(
     `${transfers.length} ${transfers.length === 1 ? 'repayment' : 'repayments'} · ${participants.length} people · ${currency}`,
-    72,
-    120,
+    66,
+    124,
   )
   context.fillStyle = colors.accent
-  context.fillRect(70, 139, 190, 7)
+  context.fillRect(64, 145, 190, 8)
 
-  const graphX = 50
-  const graphY = 175
-  const graphWidth = CHART_WIDTH - 100
-  const graphHeight = 390
-  roundedRect(context, graphX, graphY, graphWidth, graphHeight, 24)
+  const graphX = 56
+  const graphY = 188
+  const graphWidth = CHART_WIDTH - 112
+  const graphHeight = 600
+  roundedRect(context, graphX, graphY, graphWidth, graphHeight, 28)
   context.fillStyle = colors.surface
   context.fill()
   context.strokeStyle = colors.line
   context.stroke()
 
   const centerX = CHART_WIDTH / 2
-  const centerY = graphY + graphHeight / 2 - 4
-  const radiusX = participants.length <= 2 ? 280 : 410
-  const radiusY = participants.length <= 2 ? 0 : 110
+  const centerY = graphY + graphHeight / 2 - 12
+  const radiusX = participants.length <= 2 ? 250 : 350
+  const radiusY = participants.length <= 2 ? 0 : 180
   const positions = new Map(
     participants.map((participant, index) => {
       const angle = participants.length <= 2
@@ -185,9 +186,9 @@ export async function createPaymentChartBlob({
     const length = Math.hypot(dx, dy) || 1
     const unitX = dx / length
     const unitY = dy / length
-    const from = { x: start.x + unitX * 50, y: start.y + unitY * 50 }
-    const to = { x: end.x - unitX * 58, y: end.y - unitY * 58 }
-    const curve = transfers.length > 1 ? (index % 2 === 0 ? 20 : -20) : 0
+    const from = { x: start.x + unitX * 54, y: start.y + unitY * 54 }
+    const to = { x: end.x - unitX * 62, y: end.y - unitY * 62 }
+    const curve = transfers.length > 1 ? (index % 2 === 0 ? 23 : -23) : 0
     const control = {
       x: (from.x + to.x) / 2 - unitY * curve,
       y: (from.y + to.y) / 2 + unitX * curve,
@@ -197,8 +198,8 @@ export async function createPaymentChartBlob({
     context.moveTo(from.x, from.y)
     context.quadraticCurveTo(control.x, control.y, to.x, to.y)
     context.strokeStyle = colors.muted
-    context.lineWidth = 3
-    context.setLineDash([8, 7])
+    context.lineWidth = 3.5
+    context.setLineDash([9, 8])
     context.stroke()
     context.setLineDash([])
     drawArrowHead(context, to.x, to.y, Math.atan2(to.y - control.y, to.x - control.x), colors.muted)
@@ -206,9 +207,9 @@ export async function createPaymentChartBlob({
     const labelX = (from.x + 2 * control.x + to.x) / 4
     const labelY = (from.y + 2 * control.y + to.y) / 4
     const amount = formatMoney(transfer.amountCents)
-    context.font = '700 15px "Bricolage Grotesque Variable", sans-serif'
-    const labelWidth = context.measureText(amount).width + 28
-    roundedRect(context, labelX - labelWidth / 2, labelY - 17, labelWidth, 34, 17)
+    context.font = '700 17px "Bricolage Grotesque Variable", sans-serif'
+    const labelWidth = context.measureText(amount).width + 32
+    roundedRect(context, labelX - labelWidth / 2, labelY - 20, labelWidth, 40, 20)
     context.fillStyle = colors.background
     context.fill()
     context.strokeStyle = colors.line
@@ -223,57 +224,57 @@ export async function createPaymentChartBlob({
     const position = positions.get(participant.id)
     if (!position) return
     context.beginPath()
-    context.arc(position.x, position.y, 43, 0, Math.PI * 2)
+    context.arc(position.x, position.y, 48, 0, Math.PI * 2)
     context.fillStyle = participantColor(participant.name)
     context.fill()
     context.strokeStyle = colors.accentInk
-    context.lineWidth = 2
+    context.lineWidth = 2.5
     context.stroke()
     context.fillStyle = colors.accentInk
-    context.font = '750 18px "Bricolage Grotesque Variable", sans-serif'
+    context.font = '750 20px "Bricolage Grotesque Variable", sans-serif'
     context.textAlign = 'center'
     context.fillText(participantInitials(participant.name), position.x, position.y + 6)
     context.fillStyle = colors.ink
-    context.font = '700 15px "Instrument Sans Variable", sans-serif'
-    context.fillText(participant.name, position.x, position.y + 68)
+    context.font = '700 18px "Instrument Sans Variable", sans-serif'
+    context.fillText(participant.name, position.x, position.y + 78, 170)
   })
 
-  const listTop = graphY + graphHeight + 42
+  const listTop = graphY + graphHeight + 62
   context.textAlign = 'left'
   context.fillStyle = colors.muted
-  context.font = '700 13px "Instrument Sans Variable", sans-serif'
-  context.fillText('PAYMENTS TO MAKE', 70, listTop)
+  context.font = '700 15px "Instrument Sans Variable", sans-serif'
+  context.fillText('PAYMENTS TO MAKE', 64, listTop)
 
   const peopleById = new Map(participants.map((participant) => [participant.id, participant]))
   transfers.forEach((transfer, index) => {
-    const rowY = listTop + 29 + index * 68
+    const rowY = listTop + 42 + index * 88
     const from = peopleById.get(transfer.from)?.name ?? 'Someone'
     const to = peopleById.get(transfer.to)?.name ?? 'Someone'
     context.strokeStyle = colors.line
     context.lineWidth = 1
     context.beginPath()
-    context.moveTo(70, rowY + 38)
-    context.lineTo(CHART_WIDTH - 70, rowY + 38)
+    context.moveTo(64, rowY + 50)
+    context.lineTo(CHART_WIDTH - 64, rowY + 50)
     context.stroke()
 
     context.fillStyle = colors.ink
-    context.font = '700 22px "Bricolage Grotesque Variable", sans-serif'
-    context.fillText(from, 70, rowY + 7)
+    context.font = '700 26px "Bricolage Grotesque Variable", sans-serif'
+    context.fillText(from, 64, rowY + 9, 260)
     const fromWidth = context.measureText(from).width
     context.fillStyle = colors.accent
-    context.font = '700 23px "Instrument Sans Variable", sans-serif'
-    context.fillText('→', 90 + fromWidth, rowY + 7)
+    context.font = '700 28px "Instrument Sans Variable", sans-serif'
+    context.fillText('→', 88 + Math.min(fromWidth, 260), rowY + 9)
     context.fillStyle = colors.ink
-    context.font = '700 22px "Bricolage Grotesque Variable", sans-serif'
-    context.fillText(to, 130 + fromWidth, rowY + 7)
+    context.font = '700 26px "Bricolage Grotesque Variable", sans-serif'
+    context.fillText(to, 136 + Math.min(fromWidth, 260), rowY + 9, 260)
     context.textAlign = 'right'
-    context.fillText(formatMoney(transfer.amountCents), CHART_WIDTH - 70, rowY + 7)
+    context.fillText(formatMoney(transfer.amountCents), CHART_WIDTH - 64, rowY + 9)
     context.textAlign = 'left'
   })
 
   context.fillStyle = colors.muted
-  context.font = '600 13px "Instrument Sans Variable", sans-serif'
-  context.fillText('Made with Settle · Your data stays on your device', 70, chartHeight - 42)
+  context.font = '600 15px "Instrument Sans Variable", sans-serif'
+  context.fillText('Made with Settle · Your data stays on your device', 64, chartHeight - 48)
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
