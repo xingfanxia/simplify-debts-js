@@ -874,7 +874,7 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Settle home">
-          <span className="brand__mark" aria-hidden="true"><ArrowRight size={21} strokeWidth={3} /></span>
+          <span className="brand__mark" aria-hidden="true"><img src="/app-icon.png" alt="" /></span>
           <span>Settle</span>
         </a>
         <div className="topbar__actions">
@@ -1138,7 +1138,7 @@ export default function App() {
 
       <footer>
         <div>
-          <span className="brand brand--footer"><span className="brand__mark"><ArrowRight size={17} strokeWidth={3} /></span>Settle</span>
+          <span className="brand brand--footer"><span className="brand__mark"><img src="/app-icon.png" alt="" /></span>Settle</span>
           <p>Shared expenses, minus the spreadsheet.</p>
         </div>
         <a href="https://github.com/xingfanxia/simplify-debts-js" target="_blank" rel="noreferrer">
