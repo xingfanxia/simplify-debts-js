@@ -7,7 +7,19 @@
       name="description"
       content="Untangle shared expenses into a clean repayment plan. Private, fast, and entirely in your browser."
     />
-    <meta name="theme-color" content="#f4f1e8" />
+    <meta id="theme-color" name="theme-color" content="#f4f1e8" />
+    <script>
+      (() => {
+        let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        try {
+          const storedTheme = localStorage.getItem('settle-theme')
+          if (storedTheme === 'light' || storedTheme === 'dark') theme = storedTheme
+        } catch {}
+        document.documentElement.dataset.theme = theme
+        document.documentElement.style.colorScheme = theme
+        document.querySelector('#theme-color').content = theme === 'dark' ? '#101511' : '#f4f1e8'
+      })()
+    </script>
     <link rel="icon" href="/mark.svg" type="image/svg+xml" />
     <title>Settle — make shared expenses simple</title>
   </head>

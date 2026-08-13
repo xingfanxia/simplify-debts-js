@@ -6,9 +6,11 @@ import {
   Copy,
   CodeXml,
   LockKeyhole,
+  Moon,
   Plus,
   ReceiptText,
   RotateCcw,
+  Sun,
   Trash2,
   UsersRound,
   WalletCards,
@@ -18,6 +20,9 @@ import { calculateBalances, simplifyDebts } from './lib/debts'
 import { CURRENCIES, type AppState, type Currency, type Expense, type Participant, type Transfer } from './types'
 
 const STORAGE_KEY = 'settle-app-state-v2'
+const THEME_STORAGE_KEY = 'settle-theme'
+
+type Theme = 'light' | 'dark'
 
 const EMPTY_STATE: AppState = {
   participants: [],
@@ -109,6 +114,10 @@ function loadState(): AppState {
   } catch {
     return EMPTY_STATE
   }
+}
+
+function loadTheme(): Theme {
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
 }
 
 function makeId(prefix: string): string {
@@ -388,6 +397,7 @@ function ExpenseComposer({ participants, currency, onAdd }: ExpenseComposerProps
 
 export default function App() {
   const [state, setState] = useState<AppState>(loadState)
+  const [theme, setTheme] = useState<Theme>(loadTheme)
   const [nameInput, setNameInput] = useState('')
   const [peopleError, setPeopleError] = useState('')
   const [copied, setCopied] = useState(false)
@@ -395,6 +405,16 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.documentElement.style.colorScheme = theme
+    document.querySelector<HTMLMetaElement>('#theme-color')?.setAttribute(
+      'content',
+      theme === 'dark' ? '#101511' : '#f4f1e8',
+    )
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+  }, [theme])
 
   const peopleById = useMemo(
     () => new Map(state.participants.map((person) => [person.id, person])),
@@ -527,6 +547,15 @@ export default function App() {
               {CURRENCIES.map((currency) => <option key={currency}>{currency}</option>)}
             </select>
           </label>
+          <button
+            className="icon-button theme-button"
+            type="button"
+            onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
+            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
+            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
+          >
+            {theme === 'light' ? <Moon size={17} /> : <Sun size={18} />}
+          </button>
           <button className="icon-button" type="button" onClick={resetApp} aria-label="Start over" title="Start over">
             <RotateCcw size={17} />
           </button>
