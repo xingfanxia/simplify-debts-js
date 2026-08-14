@@ -1,0 +1,20 @@
+<view class="settings-page {{themeClass}}">
+  <view class="page-intro">
+    <text class="page-title">{{t.preferences}}</text>
+    <text class="page-subtitle">选择常用币种和显示外观。</text>
+  </view>
+
+  <view class="settings-card">
+    <picker range="{{currencyLabels}}" value="{{currencyIndex}}" bindchange="onCurrencyChange">
+      <view class="setting-row"><view><text>{{t.currency}}</text><text>{{currencyLabels[currencyIndex]}}</text></view><text class="chevron">›</text></view>
+    </picker>
+    <picker range="{{themeLabels}}" value="{{themeIndex}}" bindchange="onThemeChange">
+      <view class="setting-row"><view><text>{{t.theme}}</text><text>{{themeLabels[themeIndex]}}</text></view><text class="chevron">›</text></view>
+    </picker>
+  </view>
+
+  <view class="privacy-card">
+    <view><text>{{t.privacyTitle}}</text><text>{{t.privacyBody}}</text></view>
+  </view>
+  <view class="safe-bottom"></view>
+</view>

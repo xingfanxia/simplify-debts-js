@@ -4,3 +4,5 @@ coverage/
 .DS_Store
 *.local
 .vercel
+project.private.config.json
+.wechat-devtools/

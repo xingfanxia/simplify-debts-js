@@ -1,0 +1,129 @@
+<view class="app-shell {{themeClass}}">
+  <view class="app-bar">
+    <view class="app-actions">
+      <button class="utility-button" bindtap="openHistory"><text class="utility-icon">↺</text><text>{{t.history}}</text><text class="count-badge" wx:if="{{historyCount}}">{{historyCount}}</text></button>
+      <button class="utility-button" bindtap="openSettings"><text class="utility-icon">◐</text><text>{{t.settings}}</text></button>
+    </view>
+  </view>
+
+  <view class="content-stack">
+    <view class="panel people-panel">
+      <view class="section-heading">
+        <view class="step-number">01</view>
+        <view class="section-copy"><text class="section-title">{{t.whoIn}}</text><text class="section-help">{{t.whoInHelp}}</text></view>
+      </view>
+      <view class="people-form">
+        <input class="people-input" value="{{nameInput}}" placeholder="{{t.namesPlaceholder}}" confirm-type="done" bindinput="onNameInput" bindconfirm="addPeople" />
+        <button class="primary-small" bindtap="addPeople"><text class="plus">＋</text>{{t.add}}</button>
+      </view>
+      <view class="people-list" wx:if="{{participantsView.length}}">
+        <view class="person-chip" wx:for="{{participantsView}}" wx:key="id">
+          <view class="avatar avatar-small {{item.avatarClass}}">{{item.initials}}</view>
+          <text class="person-name">{{item.name}}</text>
+          <button class="chip-remove" data-id="{{item.id}}" bindtap="removePerson">×</button>
+        </view>
+      </view>
+      <view class="inline-empty" wx:else><text>{{t.cleanSlateTitle}}</text><button bindtap="tryExample">{{t.tryExample}} →</button></view>
+    </view>
+
+    <view class="panel expenses-panel" id="expense-composer">
+      <view class="section-heading">
+        <view class="step-number">02</view>
+        <view class="section-copy"><text class="section-title">{{t.whatPaid}}</text><text class="section-help">{{t.whatPaidHelp}}</text></view>
+      </view>
+
+      <view class="composer {{editingExpenseId ? 'is-editing' : ''}}">
+        <view class="editing-banner" wx:if="{{editingExpenseId}}"><text>{{t.edit}} · {{expenseForm.description}}</text><button bindtap="cancelEdit">{{t.cancel}}</button></view>
+        <label class="field-label">{{t.whatWasIt}}</label>
+        <input class="field-input" value="{{expenseForm.description}}" placeholder="{{t.descriptionPlaceholder}}" bindinput="onDescriptionInput" />
+        <view class="field-row">
+          <view class="field-group amount-field">
+            <label class="field-label">{{t.amount}}</label>
+            <view class="money-input"><text>{{currency}}</text><input type="digit" value="{{expenseForm.amount}}" placeholder="0.00" bindinput="onAmountInput" /></view>
+          </view>
+          <view class="field-group payer-field">
+            <label class="field-label">{{t.paidBy}}</label>
+            <picker disabled="{{!participantNames.length}}" range="{{participantNames}}" value="{{payerIndex}}" bindchange="onPayerChange">
+              <view class="picker-field">{{participantNames[payerIndex] || t.addTwoPeopleError}}<text>⌄</text></view>
+            </picker>
+          </view>
+        </view>
+
+        <label class="field-label split-label">{{t.splitBetween}}</label>
+        <view class="segment-control">
+          <button class="{{expenseForm.splitMode === 'everyone' ? 'is-active' : ''}}" bindtap="chooseEveryone">{{t.everyone}}</button>
+          <button class="{{expenseForm.splitMode === 'custom' ? 'is-active' : ''}}" bindtap="chooseCustom">{{t.custom}}</button>
+        </view>
+        <view class="split-people" wx:if="{{expenseForm.splitMode === 'custom'}}">
+          <button class="split-chip {{item.selected ? 'is-selected' : ''}}" wx:for="{{participantsView}}" wx:key="id" data-id="{{item.id}}" bindtap="toggleSplitPerson">
+            <view class="avatar avatar-tiny {{item.avatarClass}}">{{item.initials}}</view><text>{{item.name}}</text><text class="check">{{item.selected ? '✓' : '+'}}</text>
+          </button>
+        </view>
+        <text class="form-error" wx:if="{{formError}}">{{formError}}</text>
+      <button class="composer-submit {{participantsView.length < 2 ? 'is-disabled' : ''}}" bindtap="submitExpense" disabled="{{participantsView.length < 2}}"><text>{{editingExpenseId ? t.saveChanges : t.addExpense}}</text><text>→</text></button>
+      </view>
+
+      <view class="expense-history" wx:if="{{expensesView.length}}">
+        <view class="subheading"><text>{{t.activity}}</text><text>{{expenseCountText}}</text></view>
+        <view class="expense-list">
+          <view class="expense-row {{item.isEditing ? 'is-editing' : ''}}" wx:for="{{expensesView}}" wx:key="id">
+            <view class="receipt-icon"><view></view><view></view><view></view></view>
+            <view class="expense-copy"><text class="expense-name">{{item.description}}</text><text class="expense-note">{{item.splitText}}</text></view>
+            <text class="expense-amount">{{item.amountText}}</text>
+            <view class="row-actions"><button class="row-action" data-id="{{item.id}}" bindtap="editExpense">✎</button><button class="row-action row-action-delete" data-id="{{item.id}}" bindtap="removeExpense">×</button></view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="settlement-card">
+      <view class="settlement-header">
+        <view><text class="eyebrow">{{t.liveResult}}</text><text class="settlement-title">{{t.settlementPlan}}</text></view>
+        <view class="currency-chip">{{currency}}</view>
+      </view>
+
+      <view class="completion-panel" wx:if="{{hasExpenses}}">
+        <view class="completion-copy"><view class="bookmark">＋</view><view><text>{{t.readyForNext}}</text><text>{{t.saveAndStartNewHelp}}</text></view></view>
+        <button bindtap="saveAndStartNew"><text>{{t.saveAndStartNew}}</text><text>→</text></button>
+      </view>
+
+      <view class="result-empty" wx:if="{{!hasExpenses}}">
+        <view class="empty-flow"><view>A</view><text>→</text><view>B</view></view>
+        <text class="empty-title">{{t.cleanSlateTitle}}</text><text class="empty-body">{{t.cleanSlateBody}}</text>
+      </view>
+      <view class="result-empty balanced" wx:elif="{{isEven}}">
+        <view class="balance-seal">✓</view><text class="empty-title">{{t.alreadyEvenTitle}}</text><text class="empty-body">{{t.alreadyEvenBody}}</text>
+      </view>
+      <block wx:else>
+        <view class="summary-strip">
+          <view><text>{{t.totalSpend}}</text><text>{{totalSpendText}}</text></view>
+          <view><text>{{t.repayments}}</text><text>{{transfersView.length}}</text></view>
+          <view><text>{{t.people}}</text><text>{{participantsView.length}}</text></view>
+        </view>
+        <view class="transfer-list">
+          <view class="transfer-row" wx:for="{{transfersView}}" wx:key="key">
+            <view class="transfer-people">
+              <view class="person-side"><view class="avatar {{item.fromClass}}">{{item.fromInitials}}</view><text>{{item.fromName}}</text></view>
+              <view class="direction-chip"><view></view><text>›</text></view>
+              <view class="person-side person-side-right"><view class="avatar {{item.toClass}}">{{item.toInitials}}</view><text>{{item.toName}}</text></view>
+            </view>
+            <view class="transfer-amount"><text>{{t.onePayment}}</text><text>{{item.amountText}}</text></view>
+          </view>
+        </view>
+        <view class="share-actions">
+          <button class="share-button" bindtap="copySettlementText"><text class="action-icon">T</text><text class="action-label">{{t.copyText}}</text></button>
+          <button class="share-button share-image-button" bindtap="shareSettlementImage"><text class="action-icon">▧</text><text class="action-label">{{t.shareImage}}</text></button>
+          <button class="share-button" open-type="share"><text class="action-icon">↗</text><text class="action-label">{{t.shareMiniProgram}}</text></button>
+        </view>
+      </block>
+
+      <view class="rounding-control">
+        <view><text>{{t.wholeRepayments}}</text><text>{{t.wholeRepaymentsHelp}}</text></view>
+        <switch checked="{{state.roundToWhole}}" color="#24724d" bindchange="toggleRounding" />
+      </view>
+    </view>
+  </view>
+
+  <canvas type="2d" id="shareCanvas" class="share-canvas" style="width: 720px; height: {{shareCanvasHeight}}px;"></canvas>
+  <view class="safe-bottom"></view>
+</view>

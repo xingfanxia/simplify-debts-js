@@ -17,7 +17,10 @@
     "mobile:android": "npm run mobile:sync && cap open android",
     "mobile:android:debug": "npm run mobile:sync && ./scripts/android-gradle.sh assembleDebug",
     "mobile:android:apk": "npm run mobile:sync && ./scripts/android-gradle.sh assembleRelease",
-    "mobile:ios": "npm run mobile:sync && cap open ios"
+    "mobile:ios": "npm run mobile:sync && cap open ios",
+    "mini:open": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli open --project . --lang zh",
+    "mini:preview": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli preview --project . --lang zh",
+    "mini:cloud:list": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud env list --project . --lang zh"
   },
   "dependencies": {
     "@capacitor/clipboard": "^8.0.0",

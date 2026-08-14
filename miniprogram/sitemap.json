@@ -1,0 +1,9 @@
+{
+  "desc": "Settle pages are intentionally private utilities and do not need search indexing.",
+  "rules": [
+    {
+      "action": "disallow",
+      "page": "*"
+    }
+  ]
+}
