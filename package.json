@@ -1,7 +1,7 @@
 {
   "name": "settle-debt-simplifier",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.0.2",
   "type": "module",
   "engines": {
     "node": "^22.12.0 || >=24.0.0"

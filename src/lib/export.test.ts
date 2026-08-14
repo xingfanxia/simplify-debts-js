@@ -18,6 +18,7 @@ describe('settlement export', () => {
       participants,
       transfers,
       formatMoney: (amountCents) => `$${(amountCents / 100).toFixed(2)}`,
+      title: 'Settlement plan',
     })).toBe('Settlement plan\n\nxiao → hao · $59.00\nax → hao · $22.00')
   })
 
@@ -27,5 +28,8 @@ describe('settlement export', () => {
     expect(PAYMENT_CHART_LAYOUT.logicalWidth * PAYMENT_CHART_LAYOUT.scale).toBe(1440)
     expect(PAYMENT_CHART_LAYOUT.paymentNameFontSize * phoneScale).toBeGreaterThanOrEqual(16)
     expect(PAYMENT_CHART_LAYOUT.paymentAmountFontSize * phoneScale).toBeGreaterThanOrEqual(20)
+    expect(PAYMENT_CHART_LAYOUT.arrowChipWidth * phoneScale).toBeGreaterThanOrEqual(35)
+    expect(PAYMENT_CHART_LAYOUT.arrowStrokeWidth * PAYMENT_CHART_LAYOUT.scale).toBeGreaterThanOrEqual(8)
+    expect(PAYMENT_CHART_LAYOUT.minimumLogicalHeight).toBeLessThan(800)
   })
 })

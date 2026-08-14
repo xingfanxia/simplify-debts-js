@@ -15,6 +15,7 @@ import {
   Download,
   FileText,
   FolderOpen,
+  Globe2,
   History as HistoryIcon,
   Image as ImageIcon,
   LockKeyhole,
@@ -25,6 +26,7 @@ import {
   RotateCcw,
   Save,
   Share2,
+  Smartphone,
   Sun,
   Trash2,
   UsersRound,
@@ -33,6 +35,16 @@ import {
 } from 'lucide-react'
 import { calculateBalances, simplifyDebts } from './lib/debts'
 import { createPaymentChartBlob, formatSettlementPlan } from './lib/export'
+import {
+  detectCurrency,
+  LANGUAGE_OPTIONS,
+  localeForLanguage,
+  resolveLanguage,
+  translate,
+  type CurrencyPreference,
+  type LanguagePreference,
+  type MessageKey,
+} from './lib/i18n'
 import {
   createHistoryEntry,
   EMPTY_STATE,
@@ -44,9 +56,14 @@ import {
 import { CURRENCIES, type AppState, type Currency, type Expense, type HistoryEntry, type Participant, type Transfer } from './types'
 
 const THEME_STORAGE_KEY = 'settle-theme'
+const LANGUAGE_STORAGE_KEY = 'settle-language'
+const CURRENCY_STORAGE_KEY = 'settle-currency-preference'
 const IS_NATIVE = Capacitor.isNativePlatform()
+const TESTFLIGHT_URL = 'https://testflight.apple.com/join/TAdQsckK'
+const ANDROID_APK_URL = 'https://github.com/xingfanxia/simplify-debts-js/releases/download/v2.0.2/app-release.apk'
 
 type Theme = 'light' | 'dark'
+type Translate = (key: MessageKey, replacements?: Record<string, string | number>) => string
 
 const EXAMPLE_STATE: AppState = {
   participants: [
@@ -84,6 +101,20 @@ const EXAMPLE_STATE: AppState = {
 
 function loadTheme(): Theme {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+}
+
+function loadLanguagePreference(): LanguagePreference {
+  const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
+  return LANGUAGE_OPTIONS.some(({ value }) => value === stored)
+    ? stored as LanguagePreference
+    : 'system'
+}
+
+function loadCurrencyPreference(): CurrencyPreference {
+  const stored = window.localStorage.getItem(CURRENCY_STORAGE_KEY)
+  return stored === 'auto' || CURRENCIES.includes(stored as Currency)
+    ? stored as CurrencyPreference
+    : 'auto'
 }
 
 function makeId(prefix: string): string {
@@ -124,9 +155,10 @@ interface SettlementDiagramProps {
   participants: Participant[]
   transfers: Transfer[]
   formatMoney: (amountCents: number) => string
+  t: Translate
 }
 
-function SettlementDiagram({ participants, transfers, formatMoney }: SettlementDiagramProps) {
+function SettlementDiagram({ participants, transfers, formatMoney, t }: SettlementDiagramProps) {
   const rawMarkerId = useId()
   const markerId = `arrow-${rawMarkerId.replace(/[^a-z0-9]/gi, '')}`
   const centerX = 260
@@ -148,9 +180,9 @@ function SettlementDiagram({ participants, transfers, formatMoney }: SettlementD
   )
 
   return (
-    <div className="diagram" aria-label="Settlement relationship diagram">
+    <div className="diagram" aria-label={t('diagramAria')}>
       <svg viewBox="0 0 520 308" role="img">
-        <title>Who pays whom</title>
+        <title>{t('diagramTitle')}</title>
         <defs>
           <marker id={markerId} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" />
@@ -215,6 +247,7 @@ interface ExpenseComposerProps {
   onAdd: (expense: Expense) => void
   onUpdate: (expense: Expense) => void
   onCancelEdit: () => void
+  t: Translate
 }
 
 function ExpenseComposer({
@@ -224,6 +257,7 @@ function ExpenseComposer({
   onAdd,
   onUpdate,
   onCancelEdit,
+  t,
 }: ExpenseComposerProps) {
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
@@ -272,29 +306,29 @@ function ExpenseComposer({
     const splitWith = splitMode === 'everyone' ? participants.map(({ id }) => id) : selectedIds
 
     if (participants.length < 2) {
-      setError('Add at least two people before logging an expense.')
+      setError(t('addTwoPeopleError'))
       return
     }
     if (!paidBy) {
-      setError('Choose who paid for this expense.')
+      setError(t('choosePayerError'))
       return
     }
     if (!Number.isFinite(parsedAmount) || !Number.isSafeInteger(amountCents)) {
-      setError('Enter a valid amount.')
+      setError(t('validAmountError'))
       return
     }
     if (amountCents <= 0) {
-      setError('Enter an amount greater than zero.')
+      setError(t('positiveAmountError'))
       return
     }
     if (splitWith.length === 0) {
-      setError('Choose at least one person to share this expense.')
+      setError(t('chooseShareError'))
       return
     }
 
     const expense = {
       id: editingExpense?.id ?? makeId('expense'),
-      description: description.trim() || 'Shared expense',
+      description: description.trim() || t('sharedExpense'),
       paidBy,
       amountCents,
       splitWith,
@@ -325,7 +359,7 @@ function ExpenseComposer({
       {editingExpense && (
         <div className="edit-notice" role="status">
           <PencilLine size={16} aria-hidden="true" />
-          <span>Editing <strong>{editingExpense.description}</strong></span>
+          <span>{t('editing')} <strong>{editingExpense.description}</strong></span>
           <button
             type="button"
             onClick={() => {
@@ -333,22 +367,22 @@ function ExpenseComposer({
               onCancelEdit()
             }}
           >
-            Cancel
+            {t('cancel')}
           </button>
         </div>
       )}
       <div className="field-grid">
         <label className="field field--description">
-          <span>What was it?</span>
+          <span>{t('whatWasIt')}</span>
           <input
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="Dinner, tickets, cabin…"
+            placeholder={t('descriptionPlaceholder')}
             autoComplete="off"
           />
         </label>
         <label className="field field--amount">
-          <span>Amount</span>
+          <span>{t('amount')}</span>
           <div className="money-input">
             <span>{currency}</span>
             <input
@@ -366,14 +400,14 @@ function ExpenseComposer({
 
       <div className="field-grid field-grid--split">
         <label className="field">
-          <span>Paid by</span>
+          <span>{t('paidBy')}</span>
           <select value={paidBy} onChange={(event) => setPaidBy(event.target.value)} disabled={participants.length === 0}>
-            {participants.length === 0 && <option value="">Add people first</option>}
+            {participants.length === 0 && <option value="">{t('addPeopleFirst')}</option>}
             {participants.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
           </select>
         </label>
         <fieldset className="field split-field">
-          <legend>Split between</legend>
+          <legend>{t('splitBetween')}</legend>
           <div className="segmented-control">
             <button
               type="button"
@@ -381,7 +415,7 @@ function ExpenseComposer({
               onClick={() => setSplitMode('everyone')}
               aria-pressed={splitMode === 'everyone'}
             >
-              Everyone
+              {t('everyone')}
             </button>
             <button
               type="button"
@@ -389,14 +423,14 @@ function ExpenseComposer({
               onClick={() => setSplitMode('custom')}
               aria-pressed={splitMode === 'custom'}
             >
-              Choose people
+              {t('choosePeople')}
             </button>
           </div>
         </fieldset>
       </div>
 
       {splitMode === 'custom' && (
-        <div className="split-people" aria-label="People sharing this expense">
+        <div className="split-people" aria-label={t('sharingAria')}>
           {participants.map((person) => {
             const selected = selectedIds.includes(person.id)
             return (
@@ -427,12 +461,12 @@ function ExpenseComposer({
                 onCancelEdit()
               }}
             >
-              Cancel
+              {t('cancel')}
             </button>
           )}
           <button className="primary-button" type="submit">
             {editingExpense ? <Save size={17} /> : <Plus size={18} strokeWidth={2.5} />}
-            {editingExpense ? 'Save changes' : 'Add expense'}
+            {editingExpense ? t('saveChanges') : t('addExpense')}
           </button>
         </div>
       </div>
@@ -448,13 +482,15 @@ interface HistoryDrawerProps {
   onDelete: (entry: HistoryEntry) => void
   onOpen: (entry: HistoryEntry) => void
   onSave: (title: string) => boolean
+  locale: string
+  t: Translate
 }
 
-function suggestedHistoryTitle(state: AppState): string {
+function suggestedHistoryTitle(state: AppState, t: Translate): string {
   const firstExpense = state.expenses[0]?.description.trim()
   if (!firstExpense) return ''
   const remainder = state.expenses.length - 1
-  return remainder > 0 ? `${firstExpense} + ${remainder} more` : firstExpense
+  return remainder > 0 ? t('historyMore', { title: firstExpense, count: remainder }) : firstExpense
 }
 
 function historyEntryTotal(entry: HistoryEntry): number {
@@ -469,13 +505,17 @@ function HistoryDrawer({
   onDelete,
   onOpen,
   onSave,
+  locale,
+  t,
 }: HistoryDrawerProps) {
-  const [title, setTitle] = useState(() => suggestedHistoryTitle(currentState))
+  const [title, setTitle] = useState(() => suggestedHistoryTitle(currentState, t))
   const hasCurrentPlan = currentState.expenses.length > 0
 
   function submitHistory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const fallback = `Settlement · ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date())}`
+    const fallback = t('settlementFallback', {
+      date: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date()),
+    })
     if (onSave(title.trim() || fallback)) setTitle('')
   }
 
@@ -484,69 +524,69 @@ function HistoryDrawer({
       <aside className="history-drawer" role="dialog" aria-modal="true" aria-labelledby="history-title">
         <header className="history-drawer__header">
           <div>
-            <p className="eyebrow eyebrow--small"><span /> On this device</p>
-            <h2 id="history-title">Saved settlements</h2>
+            <p className="eyebrow eyebrow--small"><span /> {t('onThisDevice')}</p>
+            <h2 id="history-title">{t('savedSettlements')}</h2>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close history"><X size={19} /></button>
+          <button type="button" onClick={onClose} aria-label={t('closeHistory')}><X size={19} /></button>
         </header>
 
         <form className="history-save" onSubmit={submitHistory}>
           <div className="history-save__icon"><BookmarkPlus size={20} /></div>
           <div className="history-save__copy">
-            <strong>Save this settlement</strong>
-            <span>Keep a local snapshot you can reopen later.</span>
+            <strong>{t('saveSettlement')}</strong>
+            <span>{t('saveSettlementHelp')}</span>
           </div>
           <label>
-            <span className="sr-only">Settlement name</span>
+            <span className="sr-only">{t('settlementName')}</span>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Weekend trip, apartment bills…"
+              placeholder={t('historyPlaceholder')}
               maxLength={80}
               disabled={!hasCurrentPlan}
             />
           </label>
           <button className="primary-button" type="submit" disabled={!hasCurrentPlan}>
-            <BookmarkPlus size={17} /> Save locally
+            <BookmarkPlus size={17} /> {t('saveLocally')}
           </button>
-          {!hasCurrentPlan && <p>Add an expense before saving this settlement.</p>}
+          {!hasCurrentPlan && <p>{t('addExpenseBeforeSave')}</p>}
           <span className="history-notice" role="status">{notice}</span>
         </form>
 
         <section className="history-library" aria-labelledby="history-library-title">
           <div className="history-library__heading">
-            <h3 id="history-library-title">History</h3>
-            <span>{entries.length} / 50 saved</span>
+            <h3 id="history-library-title">{t('history')}</h3>
+            <span>{t('savedCounter', { count: entries.length })}</span>
           </div>
 
           {entries.length === 0 ? (
             <div className="history-empty">
               <HistoryIcon size={24} />
-              <strong>No saved settlements yet</strong>
-              <p>Saved plans stay in this browser and appear here.</p>
+              <strong>{t('noSavedTitle')}</strong>
+              <p>{t('noSavedBody')}</p>
             </div>
           ) : (
             <div className="history-list">
               {entries.map((entry) => {
-                const formatter = new Intl.NumberFormat(undefined, {
+                const formatter = new Intl.NumberFormat(locale, {
                   style: 'currency',
                   currency: entry.state.currency,
                 })
                 return (
                   <article className="history-entry" key={entry.id}>
                     <div className="history-entry__topline">
-                      <div className="history-entry__date"><CalendarDays size={13} /> {new Intl.DateTimeFormat(undefined, {
+                      <div className="history-entry__date"><CalendarDays size={13} /> {new Intl.DateTimeFormat(locale, {
                         month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
                       }).format(new Date(entry.savedAt))}</div>
-                      <button type="button" onClick={() => onDelete(entry)} aria-label={`Delete ${entry.title}`}>
+                      <button type="button" onClick={() => onDelete(entry)} aria-label={t('deleteLabel', { title: entry.title })}>
                         <Trash2 size={15} />
                       </button>
                     </div>
                     <h4>{entry.title}</h4>
                     <div className="history-entry__stats">
                       <strong>{formatter.format(historyEntryTotal(entry) / 100)}</strong>
-                      <span>{entry.state.participants.length} people</span>
-                      <span>{entry.state.expenses.length} {entry.state.expenses.length === 1 ? 'expense' : 'expenses'}</span>
+                      <span>{t('peopleCount', { count: entry.state.participants.length })}</span>
+                      <span>{t(entry.state.expenses.length === 1 ? 'expenseOne' : 'expenseMany', { count: entry.state.expenses.length })}</span>
                     </div>
                     <div className="history-entry__footer">
                       <div className="history-entry__people" aria-label={entry.state.participants.map(({ name }) => name).join(', ')}>
@@ -554,7 +594,7 @@ function HistoryDrawer({
                         {entry.state.participants.length > 5 && <span>+{entry.state.participants.length - 5}</span>}
                       </div>
                       <button className="history-open-button" type="button" onClick={() => onOpen(entry)}>
-                        <FolderOpen size={15} /> Open plan
+                        <FolderOpen size={15} /> {t('openPlan')}
                       </button>
                     </div>
                   </article>
@@ -564,7 +604,7 @@ function HistoryDrawer({
           )}
         </section>
 
-        <p className="history-privacy"><LockKeyhole size={13} /> Nothing here is uploaded or synced.</p>
+        <p className="history-privacy"><LockKeyhole size={13} /> {t('historyPrivacy')}</p>
       </aside>
     </div>
   )
@@ -576,11 +616,49 @@ export default function App() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyNotice, setHistoryNotice] = useState('')
   const [theme, setTheme] = useState<Theme>(loadTheme)
+  const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(loadLanguagePreference)
+  const [currencyPreference, setCurrencyPreference] = useState<CurrencyPreference>(loadCurrencyPreference)
   const [nameInput, setNameInput] = useState('')
   const [peopleError, setPeopleError] = useState('')
   const [exportNotice, setExportNotice] = useState('')
   const [exportBusy, setExportBusy] = useState(false)
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null)
+  const [systemLocale, setSystemLocale] = useState(() => navigator.languages[0] ?? navigator.language ?? 'en-US')
+  const language = resolveLanguage(languagePreference, systemLocale)
+  const locale = languagePreference === 'system' ? systemLocale : localeForLanguage(language)
+  const automaticCurrency = detectCurrency(systemLocale)
+  const t = useMemo<Translate>(
+    () => (key, replacements) => translate(language, key, replacements),
+    [language],
+  )
+  const localizedExampleState = useMemo<AppState>(() => ({
+    ...EXAMPLE_STATE,
+    expenses: EXAMPLE_STATE.expenses.map((expense) => ({
+      ...expense,
+      description: ({
+        dinner: t('exampleDinner'),
+        groceries: t('exampleGroceries'),
+        cab: t('exampleRide'),
+      } as Record<string, string>)[expense.id] ?? expense.description,
+    })),
+  }), [t])
+
+  useEffect(() => {
+    const followSystemLocale = () => setSystemLocale(navigator.languages[0] ?? navigator.language ?? 'en-US')
+    window.addEventListener('languagechange', followSystemLocale)
+    return () => window.removeEventListener('languagechange', followSystemLocale)
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, languagePreference)
+    document.documentElement.lang = locale
+  }, [languagePreference, locale])
+
+  useEffect(() => {
+    window.localStorage.setItem(CURRENCY_STORAGE_KEY, currencyPreference)
+    const currency = currencyPreference === 'auto' ? automaticCurrency : currencyPreference
+    setState((current) => current.currency === currency ? current : { ...current, currency })
+  }, [automaticCurrency, currencyPreference])
 
   useEffect(() => {
     try {
@@ -627,14 +705,15 @@ export default function App() {
     [state.participants, state.expenses],
   )
   const formatter = useMemo(
-    () => new Intl.NumberFormat(undefined, { style: 'currency', currency: state.currency }),
-    [state.currency],
+    () => new Intl.NumberFormat(locale, { style: 'currency', currency: state.currency }),
+    [locale, state.currency],
   )
   const formatMoney = (amountCents: number) => formatter.format(amountCents / 100)
   const totalSpend = state.expenses.reduce((sum, expense) => sum + expense.amountCents, 0)
   const activeParticipants = state.participants.filter(
     ({ id }) => (balances.get(id) ?? 0) !== 0 || transfers.some(({ from, to }) => from === id || to === id),
   )
+  const languageCode = ({ en: 'EN', 'zh-CN': '简', 'zh-TW': '繁', ja: '日', ko: '한', es: 'ES' } as const)[language]
 
   function addPeople(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -649,7 +728,7 @@ export default function App() {
     )
 
     if (uniqueNames.length === 0) {
-      setPeopleError(names.length === 0 ? 'Type at least one name.' : 'Those people are already in the group.')
+      setPeopleError(names.length === 0 ? t('typeNameError') : t('duplicateNameError'))
       return
     }
 
@@ -669,7 +748,7 @@ export default function App() {
       (expense) => expense.paidBy === person.id || expense.splitWith.includes(person.id),
     )
     if (isUsed) {
-      setPeopleError(`Remove ${person.name} from their expenses before removing them from the group.`)
+      setPeopleError(t('removePersonError', { name: person.name }))
       return
     }
     setState((current) => ({
@@ -709,7 +788,7 @@ export default function App() {
   }
 
   function resetApp() {
-    if (state.participants.length > 0 && !window.confirm('Clear everyone and every expense? This cannot be undone.')) return
+    if (state.participants.length > 0 && !window.confirm(t('resetConfirm'))) return
     setState(EMPTY_STATE)
     setNameInput('')
     setPeopleError('')
@@ -723,11 +802,11 @@ export default function App() {
     try {
       saveHistory(nextEntries)
       setHistoryEntries(nextEntries)
-      setHistoryNotice('Saved on this device')
+      setHistoryNotice(t('savedOnDevice'))
       window.setTimeout(() => setHistoryNotice(''), 2200)
       return true
     } catch {
-      setHistoryNotice('Could not access local storage')
+      setHistoryNotice(t('storageAccessError'))
       return false
     }
   }
@@ -735,7 +814,7 @@ export default function App() {
   function openHistoryEntry(entry: HistoryEntry) {
     if (
       state.expenses.length > 0 &&
-      !window.confirm(`Open “${entry.title}”? This replaces the current workspace. Save it first if you want to keep it.`)
+      !window.confirm(t('openHistoryConfirm', { title: entry.title }))
     ) return
 
     setState(structuredClone(entry.state))
@@ -745,14 +824,14 @@ export default function App() {
   }
 
   function deleteHistoryEntry(entry: HistoryEntry) {
-    if (!window.confirm(`Delete “${entry.title}” from this device?`)) return
+    if (!window.confirm(t('deleteHistoryConfirm', { title: entry.title }))) return
     const nextEntries = historyEntries.filter(({ id }) => id !== entry.id)
     try {
       saveHistory(nextEntries)
       setHistoryEntries(nextEntries)
-      setHistoryNotice('Deleted')
+      setHistoryNotice(t('deleted'))
     } catch {
-      setHistoryNotice('Could not update local storage')
+      setHistoryNotice(t('storageUpdateError'))
     }
   }
 
@@ -761,6 +840,7 @@ export default function App() {
       participants: state.participants,
       transfers,
       formatMoney,
+      title: t('settlementPlan'),
     })
   }
 
@@ -787,7 +867,7 @@ export default function App() {
     }
     try {
       if (IS_NATIVE) {
-        await NativeClipboard.write({ string: plan, label: 'Settlement plan' })
+        await NativeClipboard.write({ string: plan, label: t('settlementPlan') })
       } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(plan)
       } else {
@@ -797,7 +877,7 @@ export default function App() {
       copyWithTextArea()
     }
     closeExportMenu()
-    showExportNotice('Text copied')
+    showExportNotice(t('textCopied'))
   }
 
   async function paymentChartBlob(): Promise<Blob> {
@@ -807,6 +887,17 @@ export default function App() {
       theme,
       currency: state.currency,
       formatMoney,
+      labels: {
+        title: t('settlementPlan'),
+        subtitle: t('exportSubtitle'),
+        toMove: t('toMove'),
+        payments: t('repayments'),
+        people: t('people'),
+        paymentFlow: t('paymentFlow'),
+        payment: t('payment'),
+        amount: t('amount'),
+        footer: t('exportFooter'),
+      },
     })
   }
 
@@ -817,7 +908,7 @@ export default function App() {
       if (IS_NATIVE) {
         await NativeClipboard.write({
           image: await blobToDataUrl(blob),
-          label: 'Settle payment chart',
+          label: t('copyChart'),
         })
       } else {
         if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
@@ -826,10 +917,10 @@ export default function App() {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
       }
       closeExportMenu()
-      showExportNotice('Chart copied')
+      showExportNotice(t('chartCopied'))
     } catch {
       closeExportMenu()
-      showExportNotice('Use Download PNG in this browser')
+      showExportNotice(t('useDownloadPng'))
     } finally {
       setExportBusy(false)
     }
@@ -847,10 +938,10 @@ export default function App() {
           directory: Directory.Cache,
         })
         await Share.share({
-          title: 'Settlement plan',
-          text: 'Payment plan from Settle',
+          title: t('settlementPlan'),
+          text: t('paymentPlanFromSettle'),
           files: [result.uri],
-          dialogTitle: 'Share or save payment chart',
+          dialogTitle: t('shareChartDialog'),
         })
       } else {
         const objectUrl = URL.createObjectURL(blob)
@@ -861,10 +952,10 @@ export default function App() {
         URL.revokeObjectURL(objectUrl)
       }
       closeExportMenu()
-      showExportNotice(IS_NATIVE ? 'Chart ready to share' : 'PNG downloaded')
+      showExportNotice(IS_NATIVE ? t('chartReady') : t('pngDownloaded'))
     } catch {
       closeExportMenu()
-      showExportNotice('Could not create the chart')
+      showExportNotice(t('chartError'))
     } finally {
       setExportBusy(false)
     }
@@ -873,51 +964,83 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="Settle home">
+        <a className="brand" href="#top" aria-label={t('appHome')}>
           <span className="brand__mark" aria-hidden="true"><img src="/app-icon.png" alt="" /></span>
           <span>Settle</span>
         </a>
         <div className="topbar__actions">
-          <span className="privacy-note"><LockKeyhole size={14} /> Stays on this device</span>
-          <button className="history-button" type="button" onClick={() => setHistoryOpen(true)} aria-label="History">
+          <span className="privacy-note"><LockKeyhole size={14} /> {t('localOnly')}</span>
+          <button className="history-button" type="button" onClick={() => setHistoryOpen(true)} aria-label={t('history')}>
             <HistoryIcon size={16} />
-            <span>History</span>
+            <span>{t('history')}</span>
             {historyEntries.length > 0 && <b>{historyEntries.length}</b>}
           </button>
-          <label className="currency-picker">
-            <span className="sr-only">Currency</span>
-            <select
-              value={state.currency}
-              onChange={(event) => setState((current) => ({ ...current, currency: event.target.value as Currency }))}
-            >
-              {CURRENCIES.map((currency) => <option key={currency}>{currency}</option>)}
-            </select>
-          </label>
+          <details className="preferences-menu">
+            <summary className="preferences-button" aria-label={t('preferences')}>
+              <Globe2 size={17} />
+              <span>{languageCode}</span>
+              <ChevronDown size={13} className="preferences-button__chevron" />
+            </summary>
+            <div className="preferences-menu__popover">
+              <p>{t('preferences')}</p>
+              <label>
+                <span>{t('language')}</span>
+                <select
+                  value={languagePreference}
+                  onChange={(event) => setLanguagePreference(event.target.value as LanguagePreference)}
+                >
+                  {LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.value === 'system' ? t('systemDefault') : option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>{t('currency')}</span>
+                <select
+                  value={currencyPreference}
+                  onChange={(event) => setCurrencyPreference(event.target.value as CurrencyPreference)}
+                >
+                  <option value="auto">{t('autoCurrency', { currency: automaticCurrency })}</option>
+                  {CURRENCIES.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+                </select>
+              </label>
+            </div>
+          </details>
           <button
             className="icon-button theme-button"
             type="button"
             onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
-            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
-            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
+            aria-label={t('switchTheme', { theme: t(theme === 'light' ? 'themeDark' : 'themeLight') })}
+            title={t('switchTheme', { theme: t(theme === 'light' ? 'themeDark' : 'themeLight') })}
           >
             {theme === 'light' ? <Moon size={17} /> : <Sun size={18} />}
           </button>
-          <button className="icon-button" type="button" onClick={resetApp} aria-label="Start over" title="Start over">
+          <button className="icon-button" type="button" onClick={resetApp} aria-label={t('startOver')} title={t('startOver')}>
             <RotateCcw size={17} />
           </button>
         </div>
       </header>
 
       <main id="top">
-        <section className="intro" aria-labelledby="page-title">
-          <div>
-            <p className="eyebrow"><span /> The shortest path to even</p>
-            <h1 id="page-title">One group tab.<br /><em>Zero awkward math.</em></h1>
-          </div>
-          <p className="intro__copy">
-            Add who came and what they paid. Settle turns the whole tangle into a clean, compact repayment plan.
-          </p>
-        </section>
+        <h1 className="sr-only">{t('appTitle')}</h1>
+
+        {!IS_NATIVE && (
+          <nav className="download-strip" aria-label={t('downloadSettle')}>
+            <p><strong>{t('takeSettle')}</strong><span>{t('nativePrivateLocal')}</span></p>
+            <a href={TESTFLIGHT_URL} target="_blank" rel="noreferrer">
+              <Smartphone size={17} aria-hidden="true" />
+              <span><small>{t('iosDevices')}</small><strong>TestFlight</strong></span>
+              <ArrowDownRight size={15} aria-hidden="true" />
+            </a>
+            <a href={ANDROID_APK_URL} target="_blank" rel="noreferrer">
+              <Download size={17} aria-hidden="true" />
+              <span><small>{t('android')}</small><strong>{t('downloadApk')}</strong></span>
+              <ArrowDownRight size={15} aria-hidden="true" />
+            </a>
+          </nav>
+        )}
 
         <div className="workspace">
           <div className="workspace__input">
@@ -925,32 +1048,32 @@ export default function App() {
               <div className="section-heading">
                 <div className="step-number">01</div>
                 <div>
-                  <h2 id="people-title">Who’s in?</h2>
-                  <p>Add names one at a time or paste a comma-separated list.</p>
+                  <h2 id="people-title">{t('whoIn')}</h2>
+                  <p>{t('whoInHelp')}</p>
                 </div>
               </div>
 
               <form className="people-form" onSubmit={addPeople}>
-                <label className="sr-only" htmlFor="people-input">Names</label>
+                <label className="sr-only" htmlFor="people-input">{t('names')}</label>
                 <UsersRound size={19} aria-hidden="true" />
                 <input
                   id="people-input"
                   value={nameInput}
                   onChange={(event) => setNameInput(event.target.value)}
-                  placeholder="Alex, Maya, Theo…"
+                  placeholder={t('namesPlaceholder')}
                   autoComplete="off"
                 />
-                <button type="submit"><Plus size={18} /> Add</button>
+                <button type="submit"><Plus size={18} /> {t('add')}</button>
               </form>
               <p className="form-error people-error" role="alert">{peopleError}</p>
 
               {state.participants.length > 0 ? (
-                <div className="people-list" aria-label="Group members">
+                <div className="people-list" aria-label={t('groupMembers')}>
                   {state.participants.map((person) => (
                     <div className="person-chip" key={person.id}>
                       <PersonAvatar person={person} small />
                       <span>{person.name}</span>
-                      <button type="button" onClick={() => removePerson(person)} aria-label={`Remove ${person.name}`}>
+                      <button type="button" onClick={() => removePerson(person)} aria-label={t('removePerson', { name: person.name })}>
                         <X size={14} />
                       </button>
                     </div>
@@ -958,8 +1081,8 @@ export default function App() {
                 </div>
               ) : (
                 <div className="inline-empty">
-                  <span>No one here yet.</span>
-                  <button type="button" onClick={() => setState(EXAMPLE_STATE)}>Try an example</button>
+                  <span>{t('noOneYet')}</span>
+                  <button type="button" onClick={() => setState(localizedExampleState)}>{t('tryExample')}</button>
                 </div>
               )}
             </section>
@@ -968,8 +1091,8 @@ export default function App() {
               <div className="section-heading">
                 <div className="step-number">02</div>
                 <div>
-                  <h2 id="expense-title">What was paid?</h2>
-                  <p>Log each shared expense. We’ll do the balancing as you go.</p>
+                  <h2 id="expense-title">{t('whatPaid')}</h2>
+                  <p>{t('whatPaidHelp')}</p>
                 </div>
               </div>
 
@@ -980,13 +1103,14 @@ export default function App() {
                 onAdd={addExpense}
                 onUpdate={updateExpense}
                 onCancelEdit={() => setEditingExpenseId(null)}
+                t={t}
               />
 
               {state.expenses.length > 0 && (
                 <div className="expense-history">
                   <div className="subheading">
-                    <span>Activity</span>
-                    <span>{state.expenses.length} {state.expenses.length === 1 ? 'expense' : 'expenses'}</span>
+                    <span>{t('activity')}</span>
+                    <span>{t(state.expenses.length === 1 ? 'expenseOne' : 'expenseMany', { count: state.expenses.length })}</span>
                   </div>
                   <div className="expense-list">
                     {state.expenses.map((expense) => {
@@ -1004,14 +1128,16 @@ export default function App() {
                           <div className="expense-row__icon"><ReceiptText size={18} /></div>
                           <div className="expense-row__body">
                             <strong>{expense.description}</strong>
-                            <span>{payer?.name} paid · {isEveryone ? 'split with everyone' : `split with ${splitNames.join(', ')}`}</span>
+                            <span>{isEveryone
+                              ? t('paidSplitEveryone', { payer: payer?.name ?? '' })
+                              : t('paidSplitCustom', { payer: payer?.name ?? '', names: splitNames.join(', ') })}</span>
                           </div>
                           <strong className="expense-row__amount">{formatMoney(expense.amountCents)}</strong>
                           <div className="expense-row__actions">
-                            <button type="button" onClick={() => editExpense(expense.id)} aria-label={`Edit ${expense.description}`}>
+                            <button type="button" onClick={() => editExpense(expense.id)} aria-label={t('editExpenseLabel', { description: expense.description })}>
                               <PencilLine size={16} />
                             </button>
-                            <button type="button" onClick={() => removeExpense(expense.id)} aria-label={`Remove ${expense.description}`}>
+                            <button type="button" onClick={() => removeExpense(expense.id)} aria-label={t('removeExpenseLabel', { description: expense.description })}>
                               <Trash2 size={16} />
                             </button>
                           </div>
@@ -1028,33 +1154,33 @@ export default function App() {
             <section className="settlement-card">
               <div className="settlement-card__header">
                 <div>
-                  <p className="eyebrow eyebrow--small">Live result</p>
-                  <h2 id="settlement-title">Settlement plan</h2>
+                  <p className="eyebrow eyebrow--small">{t('liveResult')}</p>
+                  <h2 id="settlement-title">{t('settlementPlan')}</h2>
                 </div>
                 {transfers.length > 0 && (
                   <details className="export-menu">
                     <summary className="export-button">
                       {exportNotice ? <Check size={15} /> : <Share2 size={15} />}
-                      <span aria-live="polite">{exportNotice || 'Export'}</span>
+                      <span aria-live="polite">{exportNotice || t('export')}</span>
                       {!exportNotice && <ChevronDown size={14} className="export-button__chevron" />}
                     </summary>
                     <div className="export-menu__popover">
-                      <p>Share settlement</p>
+                      <p>{t('shareSettlement')}</p>
                       <button type="button" onClick={copyPlan} disabled={exportBusy}>
                         <span><FileText size={17} /></span>
-                        <span><strong>Copy text</strong><small>Names, arrows, amounts</small></span>
+                        <span><strong>{t('copyText')}</strong><small>{t('copyTextHelp')}</small></span>
                         <Copy size={14} />
                       </button>
                       <button type="button" onClick={copyPaymentChart} disabled={exportBusy}>
                         <span><ImageIcon size={17} /></span>
-                        <span><strong>Copy chart</strong><small>Phone-ready portrait image</small></span>
+                        <span><strong>{t('copyChart')}</strong><small>{t('copyChartHelp')}</small></span>
                         <Copy size={14} />
                       </button>
                       <button type="button" onClick={downloadPaymentChart} disabled={exportBusy}>
                         <span>{IS_NATIVE ? <Share2 size={17} /> : <Download size={17} />}</span>
                         <span>
-                          <strong>{IS_NATIVE ? 'Share / save PNG' : 'Download PNG'}</strong>
-                          <small>Readable portrait payment card</small>
+                          <strong>{IS_NATIVE ? t('shareSavePng') : t('downloadPng')}</strong>
+                          <small>{t('portraitCardHelp')}</small>
                         </span>
                         {IS_NATIVE ? <Share2 size={14} /> : <Download size={14} />}
                       </button>
@@ -1068,27 +1194,28 @@ export default function App() {
                   <div className="result-empty__visual" aria-hidden="true">
                     <span>A</span><ArrowRight /><span>B</span>
                   </div>
-                  <h3>Your clean slate starts here.</h3>
-                  <p>Add at least two people and one expense. The repayment plan will appear automatically.</p>
+                  <h3>{t('cleanSlateTitle')}</h3>
+                  <p>{t('cleanSlateBody')}</p>
                 </div>
               ) : transfers.length === 0 ? (
                 <div className="result-empty result-empty--balanced">
                   <div className="balance-seal"><Check size={30} strokeWidth={2.5} /></div>
-                  <h3>You’re already even.</h3>
-                  <p>No one owes anyone. That’s the best kind of settlement plan.</p>
+                  <h3>{t('alreadyEvenTitle')}</h3>
+                  <p>{t('alreadyEvenBody')}</p>
                 </div>
               ) : (
                 <>
                   <div className="summary-strip">
-                    <div><span>Total spend</span><strong>{formatMoney(totalSpend)}</strong></div>
-                    <div><span>Repayments</span><strong>{transfers.length}</strong></div>
-                    <div><span>People</span><strong>{state.participants.length}</strong></div>
+                    <div><span>{t('totalSpend')}</span><strong>{formatMoney(totalSpend)}</strong></div>
+                    <div><span>{t('repayments')}</span><strong>{transfers.length}</strong></div>
+                    <div><span>{t('people')}</span><strong>{state.participants.length}</strong></div>
                   </div>
 
                   <SettlementDiagram
                     participants={activeParticipants}
                     transfers={transfers}
                     formatMoney={formatMoney}
+                    t={t}
                   />
 
                   <div className="transfer-list">
@@ -1100,7 +1227,7 @@ export default function App() {
                           <PersonAvatar person={from} small />
                           <div className="transfer-row__sentence">
                             <span><strong>{from.name}</strong><b aria-hidden="true">→</b><strong>{to.name}</strong></span>
-                            <small>One payment, then you’re square</small>
+                            <small>{t('onePayment')}</small>
                           </div>
                           <ArrowDownRight size={17} aria-hidden="true" />
                           <strong className="transfer-row__amount">{formatMoney(transfer.amountCents)}</strong>
@@ -1113,8 +1240,8 @@ export default function App() {
 
               <div className="rounding-control">
                 <div>
-                  <strong>Whole-number repayments</strong>
-                  <span>Round fairly while keeping the ledger balanced.</span>
+                  <strong>{t('wholeRepayments')}</strong>
+                  <span>{t('wholeRepaymentsHelp')}</span>
                 </div>
                 <button
                   type="button"
@@ -1129,8 +1256,8 @@ export default function App() {
             </section>
 
             <details className="method-note">
-              <summary><WalletCards size={17} /> How the math works <Plus size={16} className="method-note__plus" /></summary>
-              <p>Settle nets what each person paid against their share, then matches the largest balances. The result needs at most one fewer repayment than there are people—and every cent remains accounted for.</p>
+              <summary><WalletCards size={17} /> {t('mathWorks')} <Plus size={16} className="method-note__plus" /></summary>
+              <p>{t('mathBody')}</p>
             </details>
           </aside>
         </div>
@@ -1139,10 +1266,10 @@ export default function App() {
       <footer>
         <div>
           <span className="brand brand--footer"><span className="brand__mark"><img src="/app-icon.png" alt="" /></span>Settle</span>
-          <p>Shared expenses, minus the spreadsheet.</p>
+          <p>{t('footerTagline')}</p>
         </div>
         <a href="https://github.com/xingfanxia/simplify-debts-js" target="_blank" rel="noreferrer">
-          <CodeXml size={17} /> View source
+          <CodeXml size={17} /> {t('viewSource')}
         </a>
       </footer>
 
@@ -1155,6 +1282,8 @@ export default function App() {
           onDelete={deleteHistoryEntry}
           onOpen={openHistoryEntry}
           onSave={saveCurrentToHistory}
+          locale={locale}
+          t={t}
         />
       )}
     </div>

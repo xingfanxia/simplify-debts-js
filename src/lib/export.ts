@@ -6,23 +6,40 @@ interface PaymentChartOptions {
   theme: 'light' | 'dark'
   currency: string
   formatMoney: (amountCents: number) => string
+  labels: PaymentChartLabels
 }
 
 interface PlainTextPlanOptions {
   participants: Participant[]
   transfers: Transfer[]
   formatMoney: (amountCents: number) => string
+  title?: string
+}
+
+export interface PaymentChartLabels {
+  title: string
+  subtitle: string
+  toMove: string
+  payments: string
+  people: string
+  paymentFlow: string
+  payment: string
+  amount: string
+  footer: string
 }
 
 export const PAYMENT_CHART_LAYOUT = {
   logicalWidth: 720,
   scale: 2,
-  minimumLogicalHeight: 1120,
-  cardsTop: 410,
-  cardHeight: 188,
-  cardGap: 20,
+  minimumLogicalHeight: 760,
+  cardsTop: 342,
+  cardHeight: 184,
+  cardGap: 16,
   paymentNameFontSize: 31,
   paymentAmountFontSize: 38,
+  arrowChipWidth: 66,
+  arrowChipHeight: 42,
+  arrowStrokeWidth: 4.5,
 } as const
 
 const NODE_COLORS = ['#9ec6ff', '#ff7d61', '#95d8b2', '#c2b7eb', '#d8ff62']
@@ -45,6 +62,7 @@ export function formatSettlementPlan({
   participants,
   transfers,
   formatMoney,
+  title = 'Settlement plan',
 }: PlainTextPlanOptions): string {
   const peopleById = new Map(participants.map((participant) => [participant.id, participant]))
   const lines = transfers.map((transfer) => {
@@ -53,7 +71,7 @@ export function formatSettlementPlan({
     return `${from} → ${to} · ${formatMoney(transfer.amountCents)}`
   })
 
-  return `Settlement plan\n\n${lines.join('\n')}`
+  return `${title}\n\n${lines.join('\n')}`
 }
 
 function roundedRect(
@@ -102,12 +120,46 @@ function drawAvatar(
   context.fillText(participantInitials(participant.name), x, y + 5)
 }
 
+function drawDirectionArrow(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  fill: string,
+  ink: string,
+) {
+  const { arrowChipWidth, arrowChipHeight, arrowStrokeWidth } = PAYMENT_CHART_LAYOUT
+  const x = centerX - arrowChipWidth / 2
+  const y = centerY - arrowChipHeight / 2
+
+  roundedRect(context, x, y, arrowChipWidth, arrowChipHeight, arrowChipHeight / 2)
+  context.fillStyle = fill
+  context.fill()
+  context.strokeStyle = ink
+  context.lineWidth = 1.5
+  context.stroke()
+
+  const startX = x + 18
+  const endX = x + arrowChipWidth - 17
+  context.beginPath()
+  context.moveTo(startX, centerY)
+  context.lineTo(endX, centerY)
+  context.moveTo(endX - 9, centerY - 8)
+  context.lineTo(endX, centerY)
+  context.lineTo(endX - 9, centerY + 8)
+  context.strokeStyle = ink
+  context.lineWidth = arrowStrokeWidth
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.stroke()
+}
+
 export async function createPaymentChartBlob({
   participants,
   transfers,
   theme,
   currency,
   formatMoney,
+  labels,
 }: PaymentChartOptions): Promise<Blob> {
   await document.fonts.ready
 
@@ -121,9 +173,12 @@ export async function createPaymentChartBlob({
     paymentNameFontSize,
     paymentAmountFontSize,
   } = PAYMENT_CHART_LAYOUT
+  const cardsBottom = cardsTop
+    + transfers.length * cardHeight
+    + Math.max(0, transfers.length - 1) * cardGap
   const chartHeight = Math.max(
     minimumLogicalHeight,
-    cardsTop + transfers.length * (cardHeight + cardGap) + 90,
+    cardsBottom + 88,
   )
   const canvas = document.createElement('canvas')
   canvas.width = chartWidth * scale
@@ -137,21 +192,21 @@ export async function createPaymentChartBlob({
         background: '#101511',
         surface: '#171d18',
         ink: '#edf4eb',
-        muted: '#aab5ab',
-        line: '#465248',
+        muted: '#bdc7be',
+        line: '#556158',
         grid: 'rgba(237, 244, 235, 0.055)',
         accent: '#d8ff62',
         accentInk: '#18231c',
       }
     : {
-        background: '#f4f1e8',
-        surface: '#fbfaf6',
-        ink: '#18231c',
-        muted: '#667068',
-        line: '#b9b9ae',
-        grid: 'rgba(24, 35, 28, 0.05)',
+        background: '#f6f3ea',
+        surface: '#fffefa',
+        ink: '#142019',
+        muted: '#465249',
+        line: '#a5aca4',
+        grid: 'rgba(20, 32, 25, 0.055)',
         accent: '#d8ff62',
-        accentInk: '#18231c',
+        accentInk: '#142019',
       }
 
   context.fillStyle = colors.background
@@ -172,23 +227,21 @@ export async function createPaymentChartBlob({
   }
 
   context.fillStyle = colors.ink
-  context.font = '700 58px "Bricolage Grotesque Variable", sans-serif'
+  context.font = '700 52px "Bricolage Grotesque Variable", sans-serif'
   context.textAlign = 'left'
-  context.fillText('Settlement plan', 44, 92)
+  context.fillText(labels.title, 44, 76, chartWidth - 88)
   context.fillStyle = colors.muted
-  context.font = '600 22px "Instrument Sans Variable", sans-serif'
+  context.font = '650 21px "Instrument Sans Variable", sans-serif'
   context.fillText(
-    'A clear, one-screen payment flow',
+    labels.subtitle,
     46,
-    132,
+    113,
   )
-  context.fillStyle = colors.accent
-  context.fillRect(44, 158, 168, 8)
 
   const summaryX = 44
-  const summaryY = 194
+  const summaryY = 145
   const summaryWidth = chartWidth - 88
-  const summaryHeight = 148
+  const summaryHeight = 122
   roundedRect(context, summaryX, summaryY, summaryWidth, summaryHeight, 24)
   context.fillStyle = colors.surface
   context.fill()
@@ -197,36 +250,36 @@ export async function createPaymentChartBlob({
   context.stroke()
 
   const summaryColumns = [
-    { label: 'TO MOVE', value: formatMoney(transfers.reduce((sum, transfer) => sum + transfer.amountCents, 0)) },
-    { label: 'PAYMENTS', value: String(transfers.length) },
-    { label: 'PEOPLE', value: String(participants.length) },
+    { label: labels.toMove.toLocaleUpperCase(), value: formatMoney(transfers.reduce((sum, transfer) => sum + transfer.amountCents, 0)) },
+    { label: labels.payments.toLocaleUpperCase(), value: String(transfers.length) },
+    { label: labels.people.toLocaleUpperCase(), value: String(participants.length) },
   ]
   summaryColumns.forEach((item, index) => {
     const columnWidth = summaryWidth / 3
     const columnX = summaryX + index * columnWidth
     if (index > 0) {
       context.beginPath()
-      context.moveTo(columnX, summaryY + 28)
-      context.lineTo(columnX, summaryY + summaryHeight - 28)
+      context.moveTo(columnX, summaryY + 22)
+      context.lineTo(columnX, summaryY + summaryHeight - 22)
       context.strokeStyle = colors.line
       context.lineWidth = 1
       context.stroke()
     }
     context.fillStyle = colors.muted
-    context.font = '750 17px "Instrument Sans Variable", sans-serif'
+    context.font = '750 16px "Instrument Sans Variable", sans-serif'
     context.textAlign = 'center'
-    context.fillText(item.label, columnX + columnWidth / 2, summaryY + 45)
+    context.fillText(item.label, columnX + columnWidth / 2, summaryY + 40)
     context.fillStyle = colors.ink
-    context.font = '700 34px "Bricolage Grotesque Variable", sans-serif'
-    context.fillText(item.value, columnX + columnWidth / 2, summaryY + 101, columnWidth - 26)
+    context.font = '700 32px "Bricolage Grotesque Variable", sans-serif'
+    context.fillText(item.value, columnX + columnWidth / 2, summaryY + 91, columnWidth - 26)
   })
 
   context.textAlign = 'left'
   context.fillStyle = colors.muted
   context.font = '750 18px "Instrument Sans Variable", sans-serif'
-  context.fillText('PAYMENT FLOW', 44, 386)
+  context.fillText(labels.paymentFlow.toLocaleUpperCase(), 44, 315)
   context.textAlign = 'right'
-  context.fillText(currency, chartWidth - 44, 386)
+  context.fillText(currency, chartWidth - 44, 315)
 
   const peopleById = new Map(participants.map((participant) => [participant.id, participant]))
   transfers.forEach((transfer, index) => {
@@ -244,28 +297,25 @@ export async function createPaymentChartBlob({
     context.textAlign = 'left'
     context.fillStyle = colors.muted
     context.font = '750 16px "Instrument Sans Variable", sans-serif'
-    context.fillText(`PAYMENT ${String(index + 1).padStart(2, '0')}`, 68, rowY + 31)
+    context.fillText(`${labels.payment.toLocaleUpperCase()} ${String(index + 1).padStart(2, '0')}`, 68, rowY + 31)
 
-    drawAvatar(context, from, 91, rowY + 79, 27, colors.accentInk)
+    drawAvatar(context, from, 94, rowY + 82, 27, colors.accentInk)
     context.textAlign = 'left'
     context.fillStyle = colors.ink
     context.font = `700 ${paymentNameFontSize}px "Bricolage Grotesque Variable", sans-serif`
-    context.fillText(truncateCanvasText(context, from.name, 180), 129, rowY + 89)
+    context.fillText(truncateCanvasText(context, from.name, 168), 132, rowY + 92)
 
-    context.textAlign = 'center'
-    context.fillStyle = colors.accent
-    context.font = '750 36px "Instrument Sans Variable", sans-serif'
-    context.fillText('→', 360, rowY + 90)
+    drawDirectionArrow(context, chartWidth / 2, rowY + 82, colors.accent, colors.accentInk)
 
-    drawAvatar(context, to, 422, rowY + 79, 27, colors.accentInk)
+    drawAvatar(context, to, 464, rowY + 82, 27, colors.accentInk)
     context.textAlign = 'left'
     context.fillStyle = colors.ink
     context.font = `700 ${paymentNameFontSize}px "Bricolage Grotesque Variable", sans-serif`
-    context.fillText(truncateCanvasText(context, to.name, 180), 460, rowY + 89)
+    context.fillText(truncateCanvasText(context, to.name, 150), 502, rowY + 92)
 
     context.beginPath()
-    context.moveTo(68, rowY + 117)
-    context.lineTo(chartWidth - 68, rowY + 117)
+    context.moveTo(68, rowY + 120)
+    context.lineTo(chartWidth - 68, rowY + 120)
     context.strokeStyle = colors.line
     context.lineWidth = 1
     context.stroke()
@@ -273,7 +323,7 @@ export async function createPaymentChartBlob({
     context.textAlign = 'left'
     context.fillStyle = colors.muted
     context.font = '750 17px "Instrument Sans Variable", sans-serif'
-    context.fillText('AMOUNT', 68, rowY + 160)
+    context.fillText(labels.amount.toLocaleUpperCase(), 68, rowY + 158)
     context.textAlign = 'right'
     context.fillStyle = colors.ink
     context.font = `700 ${paymentAmountFontSize}px "Bricolage Grotesque Variable", sans-serif`
@@ -283,7 +333,7 @@ export async function createPaymentChartBlob({
   context.fillStyle = colors.muted
   context.font = '600 17px "Instrument Sans Variable", sans-serif'
   context.textAlign = 'center'
-  context.fillText('Made with Settle · Your data stays on your device', chartWidth / 2, chartHeight - 43)
+  context.fillText(labels.footer, chartWidth / 2, chartHeight - 43, chartWidth - 88)
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
