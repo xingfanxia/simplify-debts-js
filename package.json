@@ -18,9 +18,12 @@
     "mobile:android:debug": "npm run mobile:sync && ./scripts/android-gradle.sh assembleDebug",
     "mobile:android:apk": "npm run mobile:sync && ./scripts/android-gradle.sh assembleRelease",
     "mobile:ios": "npm run mobile:sync && cap open ios",
+    "mini:configure": "node scripts/configure-wechat-mini.mjs",
     "mini:open": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli open --project . --lang zh",
     "mini:preview": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli preview --project . --lang zh",
-    "mini:cloud:list": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud env list --project . --lang zh"
+    "mini:cloud:list": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud env list --project . --lang zh",
+    "mini:cloud:deploy": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions deploy --project . --names health --remote-npm-install --lang zh",
+    "mini:upload": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli upload --project . --lang zh"
   },
   "dependencies": {
     "@capacitor/clipboard": "^8.0.0",

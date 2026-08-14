@@ -73,7 +73,7 @@ The `miniprogram/` directory is a native mini program rather than an embedded we
 npm run mini:open
 ```
 
-The committed AppID is a sandbox test ID for local development and temporary preview QR codes. Replace it with the registered Settle AppID before uploading a release. CloudBase is optional and is deliberately limited to a stateless health function; expense data remains on the device. See [the WeChat mini program guide](./docs/wechat-mini-program.md).
+The committed AppID is a sandbox test ID for local development and temporary preview QR codes. Replace it with the registered Settle AppID before uploading a release. CloudBase is optional and is deliberately limited to a stateless health function; expense data remains on the device. See [the WeChat mini program guide](./docs/wechat-mini-program.md) and [release checklist](./docs/wechat-release-checklist.md).
 
 ## How the math works
 

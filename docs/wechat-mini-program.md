@@ -16,6 +16,8 @@ npm run mini:open
 codes for the signed-in developer account, but it is not a registered Settle
 mini program and cannot be used for a public release or CloudBase environment.
 Replace it with the real AppID from WeChat Public Platform before uploading.
+The complete registration copy, privacy declaration, reviewer path, and upload
+commands are in [wechat-release-checklist.md](./wechat-release-checklist.md).
 
 The real account still needs its basic information and service category
 completed in WeChat Public Platform. Account-holder-only identity checks, QR
