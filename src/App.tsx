@@ -60,7 +60,7 @@ const LANGUAGE_STORAGE_KEY = 'settle-language'
 const CURRENCY_STORAGE_KEY = 'settle-currency-preference'
 const IS_NATIVE = Capacitor.isNativePlatform()
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/TAdQsckK'
-const ANDROID_APK_URL = 'https://github.com/xingfanxia/simplify-debts-js/releases/download/v2.0.2/app-release.apk'
+const ANDROID_APK_URL = 'https://github.com/xingfanxia/simplify-debts-js/releases/download/v2.0.3/app-release.apk'
 
 type Theme = 'light' | 'dark'
 type Translate = (key: MessageKey, replacements?: Record<string, string | number>) => string
@@ -615,6 +615,7 @@ export default function App() {
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>(loadHistory)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyNotice, setHistoryNotice] = useState('')
+  const [completionNotice, setCompletionNotice] = useState('')
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(loadLanguagePreference)
   const [currencyPreference, setCurrencyPreference] = useState<CurrencyPreference>(loadCurrencyPreference)
@@ -787,12 +788,20 @@ export default function App() {
     if (editingExpenseId === expenseId) setEditingExpenseId(null)
   }
 
-  function resetApp() {
-    if (state.participants.length > 0 && !window.confirm(t('resetConfirm'))) return
-    setState(EMPTY_STATE)
+  function clearWorkspace() {
+    setState((current) => ({
+      ...EMPTY_STATE,
+      currency: current.currency,
+      roundToWhole: current.roundToWhole,
+    }))
     setNameInput('')
     setPeopleError('')
     setEditingExpenseId(null)
+  }
+
+  function resetApp() {
+    if (state.participants.length > 0 && !window.confirm(t('resetConfirm'))) return
+    clearWorkspace()
   }
 
   function saveCurrentToHistory(title: string): boolean {
@@ -809,6 +818,19 @@ export default function App() {
       setHistoryNotice(t('storageAccessError'))
       return false
     }
+  }
+
+  function saveAndStartNew() {
+    const fallback = t('settlementFallback', {
+      date: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date()),
+    })
+    const title = suggestedHistoryTitle(state, t) || fallback
+    if (!saveCurrentToHistory(title)) return
+
+    clearWorkspace()
+    setCompletionNotice(t('savedAndStartedNew', { title }))
+    window.setTimeout(() => setCompletionNotice(''), 4200)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function openHistoryEntry(entry: HistoryEntry) {
@@ -1082,7 +1104,16 @@ export default function App() {
               ) : (
                 <div className="inline-empty">
                   <span>{t('noOneYet')}</span>
-                  <button type="button" onClick={() => setState(localizedExampleState)}>{t('tryExample')}</button>
+                  <button
+                    type="button"
+                    onClick={() => setState((current) => ({
+                      ...localizedExampleState,
+                      currency: current.currency,
+                      roundToWhole: current.roundToWhole,
+                    }))}
+                  >
+                    {t('tryExample')}
+                  </button>
                 </div>
               )}
             </section>
@@ -1189,6 +1220,20 @@ export default function App() {
                 )}
               </div>
 
+              {state.expenses.length > 0 && (
+                <div className="completion-panel">
+                  <div className="completion-panel__copy">
+                    <span><BookmarkPlus size={18} aria-hidden="true" /></span>
+                    <p><strong>{t('readyForNext')}</strong><small>{t('saveAndStartNewHelp')}</small></p>
+                  </div>
+                  <button type="button" onClick={saveAndStartNew}>
+                    <Save size={17} aria-hidden="true" />
+                    <span>{t('saveAndStartNew')}</span>
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+
               {state.expenses.length === 0 ? (
                 <div className="result-empty">
                   <div className="result-empty__visual" aria-hidden="true">
@@ -1272,6 +1317,14 @@ export default function App() {
           <CodeXml size={17} /> {t('viewSource')}
         </a>
       </footer>
+
+      {completionNotice && (
+        <div className="completion-toast" role="status">
+          <Check size={17} strokeWidth={2.7} aria-hidden="true" />
+          <span>{completionNotice}</span>
+          <button type="button" onClick={() => setHistoryOpen(true)}>{t('history')}</button>
+        </div>
+      )}
 
       {historyOpen && (
         <HistoryDrawer
