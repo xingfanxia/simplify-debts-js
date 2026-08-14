@@ -109,13 +109,13 @@ Page({
 
   onShareAppMessage() {
     return {
-      title: this.data.t.toolTitle || 'Split expenses',
+      title: this.data.t.toolTitle || '多人分账',
       path: '/pages/index/index',
     }
   },
 
   onShareTimeline() {
-    return { title: this.data.t.toolTitle || 'Split expenses' }
+    return { title: this.data.t.toolTitle || '多人分账' }
   },
 
   refreshFromStorage() {

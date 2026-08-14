@@ -1,5 +1,5 @@
 {
-  "desc": "Settle pages are intentionally private utilities and do not need search indexing.",
+  "desc": "本小程序是本地分账工具，不需要被微信索引。",
   "rules": [
     {
       "action": "disallow",

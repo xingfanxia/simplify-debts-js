@@ -11,20 +11,15 @@ image export, and “Save & start new” all run on-device through WeChat APIs.
 npm run mini:open
 ```
 
-`project.config.json` currently uses the sandbox test AppID
-`wx31e5b94c26bdf9f6`. It supports local compilation and temporary preview QR
-codes for the signed-in developer account, but it is not a registered Settle
-mini program and cannot be used for a public release or CloudBase environment.
-Replace it with the real AppID from WeChat Public Platform before uploading.
+`project.config.json` uses the registered Settle mini-program AppID. It supports
+local compilation, phone previews, and release uploads for authorized project
+members.
 The complete registration copy, privacy declaration, reviewer path, and upload
 commands are in [wechat-release-checklist.md](./wechat-release-checklist.md).
 
-The real account still needs its basic information and service category
-completed in WeChat Public Platform. Account-holder-only identity checks, QR
-scans, agreements, and any paid verification step must be completed by the
-account holder. After that, copy the `wx...` AppID into `project.config.json`,
-reopen this project, and confirm that Preview no longer labels the account as a
-sandbox account.
+Basic information and the service category are configured in WeChat Public
+Platform. Account-holder-only identity checks, QR scans, agreements, filing,
+and verification remain platform-side workflows.
 
 ## CloudBase
 

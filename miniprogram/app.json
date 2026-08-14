@@ -5,7 +5,7 @@
     "pages/settings/settings"
   ],
   "window": {
-    "navigationBarTitleText": "Split expenses",
+    "navigationBarTitleText": "多人分账",
     "navigationBarBackgroundColor": "#f5f6f4",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f5f6f4",

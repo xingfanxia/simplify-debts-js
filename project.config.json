@@ -4,8 +4,8 @@
   "cloudfunctionRoot": "cloudfunctions/",
   "compileType": "miniprogram",
   "projectname": "settle-wechat-mini-program",
-  "description": "Settle shared-expense simplifier for WeChat",
-  "appid": "wx31e5b94c26bdf9f6",
+  "description": "微信多人分账工具",
+  "appid": "wx7413688ef0714f4a",
   "libVersion": "latest",
   "setting": {
     "urlCheck": true,
@@ -55,7 +55,7 @@
       "list": [
         {
           "id": 0,
-          "name": "Settle home",
+          "name": "多人分账首页",
           "pathName": "pages/index/index",
           "query": ""
         }

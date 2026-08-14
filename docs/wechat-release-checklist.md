@@ -50,7 +50,7 @@ Suggested privacy summary:
   5. Tap `保存并新建`, then reopen the saved plan from `历史`.
   6. Change the currency and appearance from `设置`.
 
-## Commands after the real AppID exists
+## Release commands
 
 ```bash
 # Bind the registered mini program. Add --cloud-env after creating CloudBase.
@@ -68,6 +68,5 @@ npm run mini:preview
 npm run mini:upload -- --version 1.0.0 --desc "首个体验版：中文多人分账、本地历史、多币种和结算图分享"
 ```
 
-Before uploading, verify that `project.config.json` no longer contains the
-sandbox AppID `wx31e5b94c26bdf9f6` and that the preview QR code is available to
-the registered account's developers/testers.
+Before uploading, verify that the preview QR code is available to the registered
+account's developers and testers.
