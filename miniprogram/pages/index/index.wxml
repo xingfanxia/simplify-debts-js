@@ -1,7 +1,7 @@
 <view class="app-shell {{themeClass}}">
   <view class="app-bar">
     <view class="app-actions">
-      <button class="utility-button" bindtap="openHistory"><text class="utility-icon">↺</text><text>{{t.history}}</text><text class="count-badge" wx:if="{{historyCount}}">{{historyCount}}</text></button>
+      <button class="utility-button" bindtap="openHistory"><text class="utility-icon">↺</text><text>{{t.history}}</text><text class="history-count" wx:if="{{historyCount}}">{{historyCount}}</text></button>
       <button class="utility-button" bindtap="openSettings"><text class="utility-icon">◐</text><text>{{t.settings}}</text></button>
     </view>
   </view>
@@ -60,7 +60,7 @@
           </button>
         </view>
         <text class="form-error" wx:if="{{formError}}">{{formError}}</text>
-      <button class="composer-submit {{participantsView.length < 2 ? 'is-disabled' : ''}}" bindtap="submitExpense" disabled="{{participantsView.length < 2}}"><text>{{editingExpenseId ? t.saveChanges : t.addExpense}}</text><text>→</text></button>
+        <button class="composer-submit {{participantsView.length < 2 ? 'is-disabled' : ''}}" bindtap="submitExpense" disabled="{{participantsView.length < 2}}"><text>{{editingExpenseId ? t.saveChanges : t.addExpense}}</text><text>→</text></button>
       </view>
 
       <view class="expense-history" wx:if="{{expensesView.length}}">

@@ -54,19 +54,19 @@
 
 .utility-icon { font-size: 28rpx; }
 
-.count-badge {
-  position: absolute;
-  top: -8rpx;
-  right: -7rpx;
-  min-width: 30rpx;
-  height: 30rpx;
-  padding: 0 6rpx;
-  color: var(--primary-ink);
-  font-size: 18rpx;
-  line-height: 30rpx;
+.history-count {
+  display: inline-block;
+  min-width: 34rpx;
+  height: 34rpx;
+  margin-left: 3rpx;
+  padding: 0 8rpx;
+  color: var(--primary);
+  font-size: 20rpx;
+  font-weight: 750;
+  line-height: 34rpx;
   text-align: center;
-  background: var(--primary);
-  border-radius: 99rpx;
+  background: var(--accent);
+  border-radius: 10rpx;
 }
 
 .content-stack {
