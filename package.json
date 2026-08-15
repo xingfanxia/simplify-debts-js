@@ -23,9 +23,9 @@
     "mini:open": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli open --project \"$PWD\" --lang zh",
     "mini:preview": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli preview --project \"$PWD\" --lang zh",
     "mini:cloud:list": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud env list --project \"$PWD\" --lang zh",
-    "mini:cloud:deploy:health": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions deploy --project \"$PWD\" --names health --remote-npm-install --lang zh",
-    "mini:cloud:deploy:ledger": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions deploy --project \"$PWD\" --names ledger --remote-npm-install --lang zh",
-    "mini:cloud:deploy:cleanup": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions deploy --project \"$PWD\" --names ledger_cleanup --remote-npm-install --lang zh",
+    "mini:cloud:deploy:health": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions deploy --env cloud1-d3gbdocpk8fcb2e97 --project \"$PWD\" --names health --remote-npm-install --lang zh",
+    "mini:cloud:deploy:ledger": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions deploy --env cloud1-d3gbdocpk8fcb2e97 --project \"$PWD\" --names ledger --remote-npm-install --lang zh",
+    "mini:cloud:deploy:cleanup": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions deploy --env cloud1-d3gbdocpk8fcb2e97 --project \"$PWD\" --names ledger_cleanup --remote-npm-install --lang zh",
     "mini:upload": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli upload --project \"$PWD\" --lang zh"
   },
   "dependencies": {

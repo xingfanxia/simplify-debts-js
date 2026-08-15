@@ -84,15 +84,18 @@ npm run build
 获得明确部署授权后：
 
 ```bash
-npx --yes @cloudbase/cli@3.7.3 fn deploy ledger --force \
-  -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
-npx --yes @cloudbase/cli@3.7.3 fn deploy ledger_cleanup --force \
-  -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
-npx --yes @cloudbase/cli@3.7.3 config diff fn ledger \
-  -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
-npx --yes @cloudbase/cli@3.7.3 config diff fn ledger_cleanup \
-  -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
+npm run mini:cloud:deploy:ledger
+npm run mini:cloud:deploy:cleanup
+
+/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions info \
+  --env cloud1-d3gbdocpk8fcb2e97 --names ledger ledger_cleanup \
+  --project "$PWD" --lang zh
 ```
+
+部署命令必须显式携带 `--env cloud1-d3gbdocpk8fcb2e97`；微信开发者工具 CLI
+不会从 `cloudbaserc.json` 自动补充这个必填参数。若改用 CloudBase CLI，正确的
+`npx` 入口是 `npx --yes --package @cloudbase/cli@3.7.3 tcb ...`，并且必须先确认
+当前凭据确实能列出目标环境，不能仅凭本地凭据文件名判断账号。
 
 函数设置要求：
 

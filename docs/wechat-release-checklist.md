@@ -74,20 +74,22 @@ npm run mini:cloud:list
 # private collections and indexes in docs/wechat-shared-room-runbook.md.
 npm run mini:configure -- --appid wx7413688ef0714f4a --cloud-env cloud1-d3gbdocpk8fcb2e97
 
-# Deploy from cloudbaserc.json and verify the effective configuration.
-npx --yes @cloudbase/cli@3.7.3 fn deploy ledger --force -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
-npx --yes @cloudbase/cli@3.7.3 fn deploy ledger_cleanup --force -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
-npx --yes @cloudbase/cli@3.7.3 config diff fn ledger -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
-npx --yes @cloudbase/cli@3.7.3 config diff fn ledger_cleanup -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
+# Deploy to the explicit production environment and inspect the effective config.
+npm run mini:cloud:deploy:ledger
+npm run mini:cloud:deploy:cleanup
+/Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions info \
+  --env cloud1-d3gbdocpk8fcb2e97 --names ledger ledger_cleanup \
+  --project "$PWD" --lang zh
 
-# Build a phone preview, then upload the first experience version.
+# Build a phone preview, then upload the authorized version.
 npm run mini:preview
-npm run mini:upload -- --version 1.0.0 --desc "首个体验版：中文多人分账、本地历史、多币种和结算图分享"
+npm run mini:upload -- --version 2.0.3 --desc "共享账单：空房建房、微信群邀请、昵称加入、多人共同记账"
 ```
 
-Do not deploy the shared functions or upload a build until the privacy form has
-been updated and the account holder has explicitly approved the target
-environment and release action. Run the two-account checklist in
+Deploying shared functions and uploading code each require the account holder's
+explicit approval. Do not mark a build as an experience version, submit it for
+review, or release it until the privacy form is current and those later actions
+are separately approved. Run the two-account checklist in
 [wechat-shared-room-runbook.md](./wechat-shared-room-runbook.md) before review.
 
 Before uploading, verify that the preview QR code is available to the registered
