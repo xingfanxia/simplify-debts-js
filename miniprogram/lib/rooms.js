@@ -54,6 +54,42 @@ export function formatMinorMoney(amountMinor, currency) {
   return `${CURRENCY_SYMBOLS[currency] || `${currency} `}${value}`
 }
 
+export function reconcileExpenseDraft(snapshot, editingExpenseId, value) {
+  const form = isRecord(value) ? value : {}
+  const participants = Array.isArray(snapshot && snapshot.participants) ? snapshot.participants : []
+  const expenses = Array.isArray(snapshot && snapshot.expenses) ? snapshot.expenses : []
+  const participantIds = participants.map(({ participantId }) => participantId).filter(Boolean)
+  const participantIdSet = new Set(participantIds)
+  const safeEditingExpenseId = cleanString(editingExpenseId, 80)
+  const discardedEdit = Boolean(safeEditingExpenseId)
+    && !expenses.some(({ expenseId }) => expenseId === safeEditingExpenseId)
+
+  if (discardedEdit) {
+    return {
+      editingExpenseId: '',
+      discardedEdit: true,
+      form: { description: '', amount: '', paidBy: '', splitMode: 'everyone', selectedIds: [] },
+    }
+  }
+
+  const splitMode = form.splitMode === 'custom' ? 'custom' : 'everyone'
+  const selectedIds = splitMode === 'everyone'
+    ? participantIds
+    : [...new Set(Array.isArray(form.selectedIds) ? form.selectedIds : [])].filter((id) => participantIdSet.has(id))
+
+  return {
+    editingExpenseId: safeEditingExpenseId,
+    discardedEdit: false,
+    form: {
+      description: typeof form.description === 'string' ? form.description : '',
+      amount: typeof form.amount === 'string' ? form.amount : '',
+      paidBy: participantIdSet.has(form.paidBy) ? form.paidBy : (participantIds[0] || ''),
+      splitMode,
+      selectedIds,
+    },
+  }
+}
+
 export function localAmountCentsToMinor(amountCents, currency) {
   if (!Number.isSafeInteger(amountCents) || amountCents <= 0) return null
   if (minorUnitFactor(currency) === 1) return amountCents % 100 === 0 ? amountCents / 100 : null

@@ -12,6 +12,7 @@ import {
   minorUnitFactor,
   parseAmountMinor,
   parseRoomSnapshot,
+  reconcileExpenseDraft,
   saveRoomCache,
   sharedRoomsAvailable,
   snapshotToDebtState,
@@ -266,6 +267,7 @@ Page({
       if (cached && ['network_error', 'cloud_unavailable'].includes(error.code)) {
         this.applySnapshot(cached.snapshot, { offline: true })
       } else if (['membership_revoked', 'not_member', 'room_not_found'].includes(error.code)) {
+        this.stopPolling()
         clearRoomCache(this.data.roomId)
         this.setData({ mode: 'error', snapshot: null, errorMessage: errorText(error) })
       } else if (!silent || !this.data.snapshot) {
@@ -299,6 +301,7 @@ Page({
       : CURRENCIES
     const currentInvite = snapshot.invites.find((invite) => invite.inviteId === this.data.inviteId && invite.active)
     const keepCurrentInvite = offline ? this.data.inviteReady : Boolean(currentInvite)
+    const draft = reconcileExpenseDraft(snapshot, this.data.editingExpenseId, this.data.expenseForm)
     this.setData({
       mode: 'room',
       snapshot,
@@ -317,9 +320,13 @@ Page({
       inviteSharePath: keepCurrentInvite ? this.data.inviteSharePath : '',
       inviteId: keepCurrentInvite ? this.data.inviteId : '',
       inviteExpiryText: keepCurrentInvite ? this.data.inviteExpiryText : '',
+      editingExpenseId: draft.editingExpenseId,
+      expenseForm: draft.form,
+      formError: draft.discardedEdit ? '正在编辑的支出已被其他成员删除，编辑已取消。' : this.data.formError,
     }, () => {
       wx.setNavigationBarTitle({ title: snapshot.room.title })
       this.recompute()
+      if (draft.discardedEdit) wx.showToast({ title: '支出已被其他成员删除', icon: 'none', duration: 2600 })
     })
   },
 
@@ -628,6 +635,10 @@ Page({
   },
 
   async manage(kind, payload, { successText = '', leaveAfter = false } = {}) {
+    if (this.data.syncClass === 'offline') {
+      wx.showToast({ title: '离线状态下只能查看', icon: 'none' })
+      return false
+    }
     if (this.data.mutating) return false
     const fingerprint = mutationFingerprint('room_manage', kind, payload)
     const mutationId = this.pendingMutationId(fingerprint, 'manage')

@@ -128,7 +128,7 @@
         <view class="invite-record" wx:for="{{inviteListView}}" wx:key="inviteId"><view><text>{{item.statusText}} · {{item.expiryText}}</text><text>{{item.usageText}}</text></view><button wx:if="{{item.active && !readOnly}}" data-id="{{item.inviteId}}" bindtap="revokeInvite">撤销</button></view>
       </view>
 
-      <view class="room-controls">
+      <view class="room-controls" wx:if="{{syncClass !== 'offline'}}">
         <button wx:if="{{!canManage}}" bindtap="leaveRoom">退出共享账单</button>
         <block wx:else>
           <button wx:if="{{snapshot.room.status === 'active'}}" bindtap="archiveRoom">归档账单</button>

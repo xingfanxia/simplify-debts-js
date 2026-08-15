@@ -1,10 +1,10 @@
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { debtStateToRoomState, formatMinorMoney, parseAmountMinor, parseRoomSnapshot, saveRoomCache } from '../miniprogram/lib/rooms.js'
+import { debtStateToRoomState, formatMinorMoney, parseAmountMinor, parseRoomSnapshot, reconcileExpenseDraft, saveRoomCache } from '../miniprogram/lib/rooms.js'
 
 const require = createRequire(import.meta.url)
-const { createLedgerService } = require('../cloudfunctions/ledger/service.js')
+const { LIMITS, createLedgerService } = require('../cloudfunctions/ledger/service.js')
 const { RETENTION_DAYS, isInteractiveInvocation, purgeCutoff, shouldPurgeRoom } = require('../cloudfunctions/ledger_cleanup/policy.js')
 
 function clone(value) {
@@ -101,6 +101,39 @@ function sampleState() {
   }
 }
 
+describe('共享账单编辑草稿收敛', () => {
+  const snapshot = {
+    participants: [
+      { participantId: 'p-1', name: '小夏' },
+      { participantId: 'p-2', name: '小浩' },
+    ],
+    expenses: [{ expenseId: 'expense-active' }],
+  }
+
+  it('其他成员删除正在编辑的支出后取消过期编辑', () => {
+    expect(reconcileExpenseDraft(snapshot, 'expense-deleted', {
+      description: '过期草稿', amount: '12.00', paidBy: 'p-1', splitMode: 'custom', selectedIds: ['p-1'],
+    })).toEqual({
+      editingExpenseId: '',
+      discardedEdit: true,
+      form: { description: '', amount: '', paidBy: '', splitMode: 'everyone', selectedIds: [] },
+    })
+  })
+
+  it('成员变化后保留输入但移除无效付款人和分摊人', () => {
+    expect(reconcileExpenseDraft(snapshot, '', {
+      description: '晚餐', amount: '88.00', paidBy: 'p-removed', splitMode: 'custom',
+      selectedIds: ['p-2', 'p-removed', 'p-2'],
+    })).toEqual({
+      editingExpenseId: '',
+      discardedEdit: false,
+      form: {
+        description: '晚餐', amount: '88.00', paidBy: 'p-1', splitMode: 'custom', selectedIds: ['p-2'],
+      },
+    })
+  })
+})
+
 function inviteToken(result) {
   return decodeURIComponent(result.sharePath.split('invite=')[1])
 }
@@ -145,6 +178,12 @@ function createInvite(owner, snapshot, suffix = '0001', overrides = {}) {
 }
 
 describe('微信共享分账房间信任边界', () => {
+  it('实体上限为最重写入事务保留 CloudBase 操作余量', () => {
+    // 新增支出的最重成功路径：3 个鉴权/幂等读取、全部参与人、
+    // 59 个现有支出、一次碰撞读取，以及支出/房间/幂等 3 个写入。
+    expect(LIMITS.participants + LIMITS.expenses + 6).toBeLessThanOrEqual(100)
+  })
+
   it('创建时重新生成实体 ID，并且响应不泄露 OpenID', async () => {
     const { created } = await fixture()
     expect(created.ok).toBe(true)
@@ -587,12 +626,15 @@ describe('共享房间客户端边界', () => {
   it('客户端只调用 ledger 云函数，不直接读写原始集合', () => {
     const clientSource = readFileSync(new URL('../miniprogram/lib/rooms.js', import.meta.url), 'utf8')
     const pageSource = readFileSync(new URL('../miniprogram/pages/room/room.js', import.meta.url), 'utf8')
+    const roomTemplate = readFileSync(new URL('../miniprogram/pages/room/room.wxml', import.meta.url), 'utf8')
     const indexSource = readFileSync(new URL('../miniprogram/pages/index/index.js', import.meta.url), 'utf8')
     expect(clientSource).toMatch(/callFunction\(\{ name: 'ledger'/)
     expect(clientSource).not.toMatch(/\.database\s*\(/)
     expect(pageSource).not.toMatch(/\.database\s*\(/)
     expect(pageSource).not.toMatch(/console\.(?:log|error).*invite/i)
     expect(pageSource).toMatch(/pendingMutationId/)
+    expect(pageSource).toMatch(/async manage[\s\S]+?syncClass === 'offline'/)
+    expect(roomTemplate).toMatch(/class="room-controls" wx:if="\{\{syncClass !== 'offline'\}\}"/)
     expect(indexSource).toMatch(/pendingRoomCreate/)
   })
 
