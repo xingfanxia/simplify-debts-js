@@ -251,15 +251,13 @@
 .summary-strip text:last-child { margin-top: 5rpx; overflow: hidden; font-size: 27rpx; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .transfer-list { display: flex; flex-direction: column; gap: 12rpx; }
 .transfer-row { padding: 18rpx; background: var(--surface); border: 2rpx solid var(--line); border-radius: 18rpx; }
-.transfer-people { display: grid; grid-template-columns: minmax(0, 1fr) 54rpx minmax(0, 1fr); align-items: center; gap: 12rpx; }
+.transfer-people { display: grid; grid-template-columns: minmax(0, 1fr) minmax(156rpx, auto) minmax(0, 1fr); align-items: center; gap: 12rpx; }
 .person-side { min-width: 0; gap: 10rpx; }
 .person-side-right { flex-direction: row-reverse; text-align: right; }
 .person-side > text { flex: 1; min-width: 0; overflow: hidden; font-size: 26rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.direction-line { display: flex; align-items: center; justify-content: center; height: 32rpx; color: var(--primary); }
-.direction-line view { width: 30rpx; height: 3rpx; background: var(--primary); border-radius: 3rpx; }
-.direction-line text { margin-left: -4rpx; font-size: 32rpx; font-weight: 750; line-height: 24rpx; }
-.transfer-amount { display: flex; align-items: baseline; justify-content: flex-end; margin-top: 14rpx; padding-top: 13rpx; border-top: 2rpx solid var(--line); }
-.transfer-amount text { font-size: 34rpx; font-weight: 750; }
+.direction-line { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 7rpx; white-space: nowrap; }
+.direction-amount { color: var(--ink); font-size: 25rpx; font-weight: 750; font-variant-numeric: tabular-nums; }
+.direction-arrow { color: var(--primary); font-size: 31rpx; font-weight: 750; line-height: 1; }
 .share-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 9rpx; margin-top: 16rpx; }
 .share-button { display: flex; align-items: center; justify-content: center; width: 100%; min-width: 0; height: 84rpx; margin: 0; padding: 0 12rpx; gap: 8rpx; overflow: hidden; color: var(--ink); font-size: 26rpx; font-weight: 650; line-height: 1.2; background: var(--surface); border: 2rpx solid var(--line); border-radius: 14rpx; }
 .share-image-button { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); }
@@ -267,7 +265,7 @@
 .action-label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .action-icon { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 30rpx; height: 30rpx; color: var(--primary); font-size: 18rpx; font-weight: 750; background: var(--accent); border-radius: 8rpx; }
 .share-image-button .action-icon { color: var(--primary); background: var(--primary-ink); }
-.rounding-control { justify-content: space-between; gap: 20rpx; margin-top: 20rpx; padding-top: 20rpx; border-top: 2rpx solid var(--line); }
+.rounding-control { justify-content: space-between; gap: 20rpx; margin: 0 0 14rpx; padding: 14rpx 16rpx; background: var(--surface-2); border-radius: 14rpx; }
 .rounding-control > view { flex: 1; }
 .rounding-control text:first-child { font-size: 23rpx; font-weight: 700; }
 .rounding-control text:last-child { margin-top: 4rpx; color: var(--muted); font-size: 22rpx; line-height: 1.4; }
@@ -332,4 +330,6 @@
   .quick-label { display: none; }
   .shared-room-cta { grid-template-columns: 1fr; }
   .shared-room-cta button { height: 84rpx; }
+  .transfer-people { grid-template-columns: minmax(0, 1fr) minmax(140rpx, auto) minmax(0, 1fr); gap: 8rpx; }
+  .direction-amount { font-size: 23rpx; }
 }

@@ -105,14 +105,17 @@
           <view><text>{{t.repayments}}</text><text>{{transfersView.length}}</text></view>
           <view><text>{{t.people}}</text><text>{{participantsView.length}}</text></view>
         </view>
+        <view class="rounding-control">
+          <view><text>{{t.wholeRepayments}}</text><text>{{t.wholeRepaymentsHelp}}</text></view>
+          <switch checked="{{state.roundToWhole}}" color="#24724d" bindchange="toggleRounding" />
+        </view>
         <view class="transfer-list">
           <view class="transfer-row" wx:for="{{transfersView}}" wx:key="key">
             <view class="transfer-people">
               <view class="person-side"><view class="avatar {{item.fromClass}}">{{item.fromInitials}}</view><text>{{item.fromName}}</text></view>
-              <view class="direction-line"><view></view><text>›</text></view>
+              <view class="direction-line"><text class="direction-amount">{{item.amountText}}</text><text class="direction-arrow">→</text></view>
               <view class="person-side person-side-right"><view class="avatar {{item.toClass}}">{{item.toInitials}}</view><text>{{item.toName}}</text></view>
             </view>
-            <view class="transfer-amount"><text>{{item.amountText}}</text></view>
           </view>
         </view>
         <view class="share-actions">
@@ -127,10 +130,6 @@
         <button bindtap="openCreateSharedRoom">{{t.createSharedBill}} <text>↗</text></button>
       </view>
 
-      <view class="rounding-control">
-        <view><text>{{t.wholeRepayments}}</text><text>{{t.wholeRepaymentsHelp}}</text></view>
-        <switch checked="{{state.roundToWhole}}" color="#24724d" bindchange="toggleRounding" />
-      </view>
     </view>
   </view>
 
