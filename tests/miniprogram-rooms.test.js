@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { debtStateToRoomState, formatMinorMoney, parseAmountMinor, parseRoomSnapshot, reconcileExpenseDraft, saveRoomCache } from '../miniprogram/lib/rooms.js'
+import { simplifyDebts } from '../miniprogram/lib/debts.js'
+import { debtStateToRoomState, formatMinorMoney, parseAmountMinor, parseRoomSnapshot, reconcileExpenseDraft, saveRoomCache, snapshotToDebtState } from '../miniprogram/lib/rooms.js'
 
 const require = createRequire(import.meta.url)
 const { LIMITS, createLedgerService } = require('../cloudfunctions/ledger/service.js')
@@ -393,6 +394,57 @@ describe('微信共享分账 V2 信任边界', () => {
 })
 
 describe('微信共享分账 V2 并发与幂等', () => {
+  it('两名微信成员可分别新增和编辑支出，并在同一 revision 得到相同结算', async () => {
+    const { owner, created, service } = await fixture()
+    const invitation = await createInvite(owner, created.snapshot, 'two-member-flow')
+    const guest = service('second-member-openid')
+    const joined = await joinWithProfile(guest, inviteToken(invitation), 'join-two-member-1', '成员 B')
+
+    const ownerAfterJoin = (await owner.execute({ action: 'room_get', roomId: joined.snapshot.room.roomId })).snapshot
+    const ownerExpense = await addExpense(owner, ownerAfterJoin, 'owner-flow', {
+      description: 'A 添加', amountMinor: 6000,
+    })
+    const guestAfterOwnerAdd = (await guest.execute({ action: 'room_get', roomId: joined.snapshot.room.roomId })).snapshot
+    expect(guestAfterOwnerAdd.expenses).toMatchObject([{ expenseId: ownerExpense.entityId, description: 'A 添加', amountMinor: 6000 }])
+
+    const guestExpense = await addExpense(guest, guestAfterOwnerAdd, 'guest-flow', {
+      description: 'B 添加', amountMinor: 3000,
+    })
+    const ownerAfterGuestAdd = (await owner.execute({ action: 'room_get', roomId: joined.snapshot.room.roomId })).snapshot
+    expect(ownerAfterGuestAdd.expenses).toHaveLength(2)
+
+    const activeIds = ownerAfterGuestAdd.participants.filter(({ memberActive }) => memberActive).map(({ participantId }) => participantId)
+    const ownerEdited = await owner.execute({
+      action: 'room_mutate', roomId: ownerAfterGuestAdd.room.roomId, baseRevision: ownerAfterGuestAdd.room.revision,
+      mutationId: 'owner-edit-shared-1', kind: 'upsert_expense',
+      payload: { expense: { expenseId: ownerExpense.entityId, description: 'A 修改', amountMinor: 8000, paidByParticipantId: ownerAfterGuestAdd.self.participantId, splitParticipantIds: activeIds } },
+    })
+    const guestBeforeEdit = (await guest.execute({ action: 'room_get', roomId: joined.snapshot.room.roomId })).snapshot
+    expect(guestBeforeEdit.expenses.find(({ expenseId }) => expenseId === ownerExpense.entityId)).toMatchObject({ description: 'A 修改', amountMinor: 8000 })
+    const guestEdited = await guest.execute({
+      action: 'room_mutate', roomId: guestBeforeEdit.room.roomId, baseRevision: ownerEdited.revision,
+      mutationId: 'guest-edit-shared-1', kind: 'upsert_expense',
+      payload: { expense: { expenseId: guestExpense.entityId, description: 'B 修改', amountMinor: 4000, paidByParticipantId: guestBeforeEdit.self.participantId, splitParticipantIds: activeIds } },
+    })
+
+    const [ownerFinal, guestFinal] = await Promise.all([
+      owner.execute({ action: 'room_get', roomId: joined.snapshot.room.roomId }),
+      guest.execute({ action: 'room_get', roomId: joined.snapshot.room.roomId }),
+    ])
+    expect(ownerFinal.snapshot.room.revision).toBe(guestEdited.revision)
+    expect(guestFinal.snapshot.room.revision).toBe(guestEdited.revision)
+    expect(ownerFinal.snapshot.expenses).toEqual(guestFinal.snapshot.expenses)
+    const ownerState = snapshotToDebtState(ownerFinal.snapshot)
+    const guestState = snapshotToDebtState(guestFinal.snapshot)
+    expect(simplifyDebts(ownerState.participants, ownerState.expenses, false))
+      .toEqual(simplifyDebts(guestState.participants, guestState.expenses, false))
+    expect(simplifyDebts(ownerState.participants, ownerState.expenses, false)).toEqual([{
+      from: guestFinal.snapshot.self.participantId,
+      to: ownerFinal.snapshot.self.participantId,
+      amountCents: 2000,
+    }])
+  })
+
   it('重复 mutationId 不会重复新增支出', async () => {
     const { owner, created } = await fixture()
     const mutation = {
