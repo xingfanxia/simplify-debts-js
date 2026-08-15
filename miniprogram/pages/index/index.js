@@ -1,5 +1,6 @@
 import { simplifyDebts } from '../../lib/debts'
 import { detectCurrency, getMessages, translate } from '../../lib/i18n'
+import { callLedger, getCachedRooms, saveRoomCache, sharedRoomsAvailable } from '../../lib/rooms'
 import {
   createHistoryEntry,
   CURRENCIES,
@@ -68,6 +69,18 @@ function defaultExpenseForm() {
   }
 }
 
+function sharedRoomError(error) {
+  const messages = {
+    cloud_unavailable: '共享功能尚未连接云环境。',
+    network_error: '网络暂时不可用，请稍后重试。',
+    invalid_state: '当前账单无法共享，请检查参与人和支出。',
+    invalid_participants: '共享账单需要 2–30 位参与人。',
+    invalid_expenses: '单个共享账单最多支持 60 笔支出。',
+    duplicate_participant: '参与人姓名不能重复。',
+  }
+  return messages[error && error.code] || '创建共享账单失败，请稍后重试。'
+}
+
 function localizedExample(language, currency, roundToWhole) {
   const t = (key) => translate(language, key)
   return {
@@ -116,6 +129,13 @@ Page({
     themeShortLabel: '',
     showSaveDialog: false,
     saveTitleInput: '',
+    sharedRoomsEnabled: false,
+    showShareRoomDialog: false,
+    shareRoomTitleInput: '',
+    shareDisplayNameInput: '',
+    shareOwnerNames: [],
+    shareOwnerIndex: 0,
+    creatingSharedRoom: false,
   },
 
   onLoad() {
@@ -161,13 +181,14 @@ Page({
       t,
       themeClass: theme === 'dark' ? 'theme-dark' : '',
       state,
-      historyCount: getHistory().length,
+      historyCount: getHistory().length + getCachedRooms().length,
       currencyValues,
       currencyLabels: [translate(language, 'automatic', { value: currency }), ...CURRENCIES.map((code) => `${CURRENCY_NAMES[code]}（${code}）`)],
       currencyIndex: Math.max(0, currencyValues.indexOf(preferences.currency)),
       themeLabels: THEME_OPTIONS.map(({ key }) => t[key]),
       themeIndex,
       themeShortLabel: t[THEME_OPTIONS[themeIndex].shortKey],
+      sharedRoomsEnabled: sharedRoomsAvailable(),
     }, () => this.recompute())
   },
 
@@ -456,6 +477,74 @@ Page({
 
   openHistory() {
     wx.navigateTo({ url: '/pages/history/history' })
+  },
+
+  openCreateSharedRoom() {
+    if (!this.data.sharedRoomsEnabled) {
+      wx.showToast({ title: this.data.t.sharedUnavailable, icon: 'none' })
+      return
+    }
+    if (this.data.state.participants.length < 2 || this.data.state.expenses.length === 0) {
+      wx.showToast({ title: this.data.t.sharedNeedsBill, icon: 'none' })
+      return
+    }
+    const date = new Date()
+    const title = `${date.getMonth() + 1}月${date.getDate()}日分账`
+    this.setData({
+      showShareRoomDialog: true,
+      shareRoomTitleInput: title,
+      shareDisplayNameInput: this.data.state.participants[0]?.name || '我',
+      shareOwnerNames: [this.data.t.noClaim, ...this.data.state.participants.map(({ name }) => name)],
+      shareOwnerIndex: 1,
+    })
+  },
+
+  onShareRoomTitleInput(event) {
+    this.setData({ shareRoomTitleInput: event.detail.value })
+  },
+
+  onShareDisplayNameInput(event) {
+    this.setData({ shareDisplayNameInput: event.detail.value })
+  },
+
+  onShareOwnerChange(event) {
+    const index = Number(event.detail.value)
+    const participant = this.data.state.participants[index - 1]
+    this.setData({
+      shareOwnerIndex: index,
+      shareDisplayNameInput: participant ? participant.name : this.data.shareDisplayNameInput,
+    })
+  },
+
+  closeShareRoomDialog() {
+    if (this.data.creatingSharedRoom) return
+    this.setData({ showShareRoomDialog: false })
+  },
+
+  async confirmCreateSharedRoom() {
+    if (this.data.creatingSharedRoom) return
+    const title = this.data.shareRoomTitleInput.trim()
+    const displayName = this.data.shareDisplayNameInput.trim()
+    if (!title || !displayName) {
+      wx.showToast({ title: this.data.t.sharedNameRequired, icon: 'none' })
+      return
+    }
+    const ownerParticipant = this.data.state.participants[this.data.shareOwnerIndex - 1]
+    this.setData({ creatingSharedRoom: true })
+    try {
+      const result = await callLedger('room_create', {
+        title,
+        displayName,
+        ownerParticipantId: ownerParticipant?.id || '',
+        state: this.data.state,
+      })
+      const snapshot = saveRoomCache(result.snapshot)
+      this.setData({ creatingSharedRoom: false, showShareRoomDialog: false })
+      wx.navigateTo({ url: `/pages/room/room?roomId=${encodeURIComponent(snapshot.room.roomId)}` })
+    } catch (error) {
+      this.setData({ creatingSharedRoom: false })
+      wx.showToast({ title: sharedRoomError(error), icon: 'none', duration: 2800 })
+    }
   },
 
   settlementText() {

@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/room/room",
     "pages/history/history",
     "pages/settings/settings"
   ],

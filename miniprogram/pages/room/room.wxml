@@ -1,0 +1,142 @@
+<view class="room-page {{themeClass}}">
+  <view class="state-page" wx:if="{{mode === 'loading'}}">
+    <view class="spinner"></view>
+    <text>正在打开共享账单…</text>
+  </view>
+
+  <view class="state-page" wx:elif="{{mode === 'error'}}">
+    <view class="state-icon">!</view>
+    <text class="state-title">无法打开</text>
+    <text class="state-help">{{errorMessage}}</text>
+    <button class="secondary-button" bindtap="onPullDownRefresh">重新尝试</button>
+  </view>
+
+  <view class="join-page" wx:elif="{{mode === 'preview'}}">
+    <view class="join-heading">
+      <text class="overline">共享账单邀请</text>
+      <text class="join-title">{{preview.title}}</text>
+      <text class="join-meta">{{preview.currency}} · {{preview.participantCount}} 位参与人</text>
+    </view>
+
+    <view class="join-card">
+      <text class="card-title">加入前确认身份</text>
+      <text class="card-help">加入后才能查看支出；其他成员会看到你填写的名称。</text>
+      <label class="field-label">你的显示名称</label>
+      <input class="field-input" value="{{joinDisplayName}}" maxlength="28" placeholder="例如：小夏" bindinput="onJoinNameInput" />
+
+      <label class="field-label identity-label">你是账单里的谁？</label>
+      <view class="identity-list">
+        <button class="identity-option {{joinChoice === item.participantId ? 'is-selected' : ''}}" wx:for="{{preview.claimableParticipants}}" wx:key="participantId" data-id="{{item.participantId}}" bindtap="selectJoinChoice">
+          <view class="identity-dot"></view><text>{{item.name}}</text><text>{{joinChoice === item.participantId ? '✓' : ''}}</text>
+        </button>
+        <button class="identity-option {{joinChoice === '__new__' ? 'is-selected' : ''}}" data-id="__new__" bindtap="selectJoinChoice">
+          <view class="identity-dot"></view><text>我是新参与人</text><text>{{joinChoice === '__new__' ? '✓' : ''}}</text>
+        </button>
+      </view>
+      <input class="field-input new-person-field" wx:if="{{joinChoice === '__new__'}}" value="{{newParticipantName}}" maxlength="28" placeholder="输入参与人姓名" bindinput="onNewParticipantInput" />
+      <button class="primary-button" loading="{{joining}}" disabled="{{joining}}" bindtap="joinRoom">加入共享账单 <text>→</text></button>
+    </view>
+    <text class="privacy-note">加入后，这笔账会从云端同步到你的设备。</text>
+  </view>
+
+  <block wx:elif="{{mode === 'room'}}">
+    <view class="room-header">
+      <view class="room-heading-row">
+        <view class="room-heading-copy"><text class="overline">共享账单</text><text class="room-title">{{roomTitle}}</text></view>
+        <view class="sync-pill {{syncClass}}"><view></view><text>{{syncText}}</text></view>
+      </view>
+      <view class="room-meta"><picker range="{{currencyValues}}" value="{{currencyIndex}}" disabled="{{!canManage || readOnly}}" bindchange="onRoomCurrencyChange"><view>{{currency}}{{canManage && !readOnly ? '⌄' : ''}}</view></picker><text>{{revisionText}}</text><text>{{membersView.length}} 位成员</text></view>
+      <view class="invite-actions" wx:if="{{canManage && !readOnly}}">
+        <button class="invite-button" wx:if="{{!inviteReady}}" loading="{{invitePreparing}}" disabled="{{invitePreparing}}" bindtap="prepareInvite">生成微信邀请 <text>↗</text></button>
+        <block wx:else>
+          <button class="invite-button" open-type="share">发送邀请 <text>↗</text></button>
+          <view class="invite-ready-row"><text>{{inviteExpiryText}}</text><button bindtap="revokeCurrentInvite">撤销</button></view>
+        </block>
+      </view>
+    </view>
+
+    <view class="room-content">
+      <view class="summary-card">
+        <view><text>总支出</text><text>{{totalSpendText}}</text></view>
+        <view><text>支出</text><text>{{expensesView.length}}</text></view>
+        <view><text>还款</text><text>{{transfersView.length}}</text></view>
+      </view>
+
+      <view class="tool-card">
+        <view class="card-heading"><view><text class="card-title">参与人</text><text class="card-help">账单里的姓名和微信成员分开管理。</text></view><text>{{participantsView.length}}</text></view>
+        <view class="participant-grid">
+          <view class="participant-chip" wx:for="{{participantsView}}" wx:key="participantId">
+            <view class="avatar {{item.avatarClass}}">{{item.initials}}</view>
+            <view class="participant-copy"><text>{{item.name}}</text><text>{{item.isClaimed ? '已认领' : '未认领'}}</text></view>
+            <view class="participant-actions" wx:if="{{!readOnly}}"><button data-id="{{item.participantId}}" bindtap="renameParticipant">✎</button><button wx:if="{{item.canRemove}}" class="danger-text" data-id="{{item.participantId}}" bindtap="removeParticipant">×</button></view>
+          </view>
+        </view>
+        <view class="inline-form" wx:if="{{!readOnly}}">
+          <input value="{{newParticipantInput}}" maxlength="28" placeholder="添加参与人" bindinput="onParticipantInput" bindconfirm="addParticipant" />
+          <button bindtap="addParticipant">添加</button>
+        </view>
+      </view>
+
+      <view class="tool-card" id="shared-expense-composer">
+        <view class="card-heading"><view><text class="card-title">{{editingExpenseId ? '编辑支出' : '添加支出'}}</text><text class="card-help">保存后会同步给房间里的所有成员。</text></view><button wx:if="{{editingExpenseId}}" bindtap="cancelExpenseEdit">取消</button></view>
+        <view class="readonly-banner" wx:if="{{readOnly}}">{{syncClass === 'offline' ? '离线状态下只能查看最近同步的内容。' : '该账单已归档，只能查看。'}}</view>
+        <block wx:else>
+          <label class="field-label">支出内容</label>
+          <input class="field-input" value="{{expenseForm.description}}" maxlength="60" placeholder="晚餐、车票、民宿…" bindinput="onDescriptionInput" />
+          <view class="two-fields">
+            <view><label class="field-label">金额（{{currency}}）</label><input class="field-input" type="digit" value="{{expenseForm.amount}}" placeholder="0.00" bindinput="onAmountInput" /></view>
+            <view><label class="field-label">付款人</label><picker range="{{participantNames}}" value="{{payerIndex}}" bindchange="onPayerChange"><view class="picker-field">{{participantNames[payerIndex] || '请选择'}} <text>⌄</text></view></picker></view>
+          </view>
+          <label class="field-label">由谁分摊</label>
+          <view class="segment-control"><button class="{{expenseForm.splitMode === 'everyone' ? 'is-active' : ''}}" bindtap="chooseEveryone">所有人</button><button class="{{expenseForm.splitMode === 'custom' ? 'is-active' : ''}}" bindtap="chooseCustom">选择成员</button></view>
+          <view class="split-grid" wx:if="{{expenseForm.splitMode === 'custom'}}">
+            <button class="split-option {{item.selected ? 'is-selected' : ''}}" wx:for="{{participantsView}}" wx:key="participantId" data-id="{{item.participantId}}" bindtap="toggleSplitPerson">{{item.name}} <text>{{item.selected ? '✓' : '+'}}</text></button>
+          </view>
+          <text class="form-error" wx:if="{{formError}}">{{formError}}</text>
+          <button class="primary-button" loading="{{mutating}}" disabled="{{mutating}}" bindtap="submitExpense">{{editingExpenseId ? '保存修改' : '添加支出'}} <text>→</text></button>
+        </block>
+      </view>
+
+      <view class="tool-card" wx:if="{{expensesView.length}}">
+        <view class="card-heading"><view><text class="card-title">支出记录</text><text class="card-help">最近同步的 {{expensesView.length}} 笔支出。</text></view></view>
+        <view class="expense-list">
+          <view class="expense-row {{item.isEditing ? 'is-editing' : ''}}" wx:for="{{expensesView}}" wx:key="expenseId">
+            <view class="expense-main"><text>{{item.description}}</text><text>{{item.payerName}} 付款 · {{item.splitText}}</text></view>
+            <text class="expense-money">{{item.amountText}}</text>
+            <view class="expense-actions" wx:if="{{!readOnly}}"><button data-id="{{item.expenseId}}" bindtap="editExpense">编辑</button><button class="danger-text" data-id="{{item.expenseId}}" bindtap="removeExpense">删除</button></view>
+          </view>
+        </view>
+      </view>
+
+      <view class="tool-card settlement-card">
+        <view class="card-heading"><view><text class="card-title">结算方案</text><text class="card-help">根据当前支出自动计算。</text></view><text>{{currency}}</text></view>
+        <view class="settlement-empty" wx:if="{{!expensesView.length}}">添加支出后，这里会显示还款路径。</view>
+        <view class="settlement-empty" wx:elif="{{!transfersView.length}}">✓ 当前已经结清</view>
+        <view class="transfer-list" wx:else>
+          <view class="transfer-row" wx:for="{{transfersView}}" wx:key="key"><text>{{item.fromName}}</text><view class="arrow">→</view><text>{{item.toName}}</text><text>{{item.amountText}}</text></view>
+        </view>
+        <view class="rounding-row"><view><text>整数还款</text><text>取整的同时保持总额平衡。</text></view><switch checked="{{snapshot.room.roundToWhole}}" disabled="{{readOnly}}" color="#24724d" bindchange="toggleRounding" /></view>
+      </view>
+
+      <view class="tool-card members-card">
+        <view class="card-heading"><view><text class="card-title">房间成员</text><text class="card-help">只有已加入的微信用户可以查看完整账单。</text></view></view>
+        <view class="member-row" wx:for="{{membersView}}" wx:key="memberId"><view class="avatar {{item.avatarClass}}">{{item.initials}}</view><view><text>{{item.displayName}}{{item.isSelf ? '（你）' : ''}}</text><text>{{item.roleText}}</text></view><button wx:if="{{item.canRemove && !readOnly}}" data-id="{{item.memberId}}" bindtap="removeMember">移除</button></view>
+      </view>
+
+      <view class="tool-card" wx:if="{{canManage && inviteListView.length}}">
+        <view class="card-heading"><view><text class="card-title">邀请记录</text><text class="card-help">邀请链接不会显示在这里，可以随时撤销访问能力。</text></view></view>
+        <view class="invite-record" wx:for="{{inviteListView}}" wx:key="inviteId"><view><text>{{item.statusText}} · {{item.expiryText}}</text><text>{{item.usageText}}</text></view><button wx:if="{{item.active && !readOnly}}" data-id="{{item.inviteId}}" bindtap="revokeInvite">撤销</button></view>
+      </view>
+
+      <view class="room-controls">
+        <button wx:if="{{!canManage}}" bindtap="leaveRoom">退出共享账单</button>
+        <block wx:else>
+          <button wx:if="{{snapshot.room.status === 'active'}}" bindtap="archiveRoom">归档账单</button>
+          <button class="danger-text" bindtap="deleteRoom">删除共享账单</button>
+        </block>
+      </view>
+      <text class="privacy-footer">共享账单保存在云端，仅房间成员可以访问。</text>
+    </view>
+  </block>
+  <view class="safe-bottom"></view>
+</view>

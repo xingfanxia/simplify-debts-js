@@ -1,5 +1,6 @@
 import { getMessages, translate } from '../../lib/i18n'
 import { getCurrentState, getHistory, getPreferences, resolveTheme, saveCurrentState, saveHistory } from '../../lib/storage'
+import { getCachedRooms } from '../../lib/rooms'
 
 const SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩', MXN: 'MX$', BRL: 'R$', TWD: 'NT$', HKD: 'HK$', INR: '₹' }
 
@@ -26,6 +27,7 @@ Page({
     t: getMessages('zh-Hans'),
     language: 'zh-Hans',
     entries: [],
+    sharedEntries: [],
   },
 
   onShow() {
@@ -44,13 +46,29 @@ Page({
       peopleText: translate(language, 'people', { count: entry.state.participants.length }),
       avatars: entry.state.participants.slice(0, 4).map((person) => ({ id: person.id, initials: initials(person.name) })),
     }))
+    const sharedEntries = getCachedRooms().map(({ roomId, snapshot }) => ({
+      roomId,
+      title: snapshot.room.title,
+      currency: snapshot.room.currency,
+      statusText: snapshot.room.status === 'archived' ? '已归档' : '云端同步',
+      totalText: formatMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountCents, 0), snapshot.room.currency),
+      expenseText: `${snapshot.expenses.length} 笔支出`,
+      membersText: `${snapshot.members.length} 位成员`,
+      avatars: snapshot.participants.slice(0, 4).map((person) => ({ id: person.participantId, initials: initials(person.name) })),
+    }))
     this.setData({
       language,
       t: getMessages(),
       themeClass: theme === 'dark' ? 'theme-dark' : '',
       entries,
+      sharedEntries,
     })
     wx.setNavigationBarTitle({ title: translate(language, 'history') })
+  },
+
+  openSharedRoom(event) {
+    const roomId = event.currentTarget.dataset.id
+    if (roomId) wx.navigateTo({ url: `/pages/room/room?roomId=${encodeURIComponent(roomId)}` })
   },
 
   openEntry(event) {

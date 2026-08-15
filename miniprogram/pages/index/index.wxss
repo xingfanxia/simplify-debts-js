@@ -272,6 +272,12 @@
 .rounding-control > view { flex: 1; }
 .rounding-control text:first-child { font-size: 23rpx; font-weight: 700; }
 .rounding-control text:last-child { margin-top: 4rpx; color: var(--muted); font-size: 22rpx; line-height: 1.4; }
+.shared-room-cta { display: grid; grid-template-columns: minmax(0, 1fr) 210rpx; gap: 16rpx; margin-top: 18rpx; padding: 18rpx; align-items: center; background: var(--accent); border: 2rpx solid var(--line); border-radius: 16rpx; }
+.shared-room-cta > view { min-width: 0; }
+.shared-room-cta text { display: block; }
+.shared-room-cta > view text:first-child { font-size: 24rpx; font-weight: 750; }
+.shared-room-cta > view text:last-child { margin-top: 4rpx; color: var(--muted); font-size: 20rpx; line-height: 1.4; }
+.shared-room-cta button { display: flex; width: 100%; height: 70rpx; padding: 0 14rpx; align-items: center; justify-content: space-between; color: var(--primary-ink); font-size: 21rpx; font-weight: 750; line-height: 70rpx; background: var(--primary); border-radius: 12rpx; }
 .share-canvas { position: fixed; top: 0; left: -9999px; opacity: 0; pointer-events: none; }
 
 .save-dialog-backdrop {
@@ -307,6 +313,12 @@
 .save-dialog-actions button { width: 100%; min-width: 0; height: 78rpx; margin: 0; padding: 0 16rpx; font-size: 24rpx; font-weight: 700; line-height: 78rpx; border-radius: 14rpx; }
 .save-cancel { color: var(--muted); background: var(--surface-2); }
 .save-confirm { color: var(--primary-ink); background: var(--primary); }
+.share-room-dialog { max-height: 90vh; overflow-y: auto; }
+.dialog-label { display: block; margin-top: 18rpx; color: var(--muted); font-size: 21rpx; font-weight: 700; }
+.dialog-input { margin-top: 8rpx; }
+.dialog-picker { display: flex; align-items: center; justify-content: space-between; line-height: 86rpx; }
+.cloud-notice { display: flex; gap: 10rpx; margin-top: 18rpx; padding: 14rpx; color: var(--muted); font-size: 20rpx; line-height: 1.45; background: var(--surface-2); border-radius: 12rpx; }
+.cloud-notice view { flex: 0 0 12rpx; width: 12rpx; height: 12rpx; margin-top: 8rpx; background: var(--primary); border-radius: 50%; }
 
 @media (max-width: 360px) {
   .app-shell { padding-right: 18rpx; padding-left: 18rpx; }
@@ -319,4 +331,6 @@
   .history-button { flex-basis: 124rpx; width: 124rpx; min-width: 124rpx; padding: 0 12rpx; }
   .quick-settings { flex-basis: 348rpx; width: 348rpx; }
   .quick-label { display: none; }
+  .shared-room-cta { grid-template-columns: 1fr; }
+  .shared-room-cta button { height: 66rpx; }
 }

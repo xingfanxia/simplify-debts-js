@@ -36,7 +36,7 @@ projectConfig.appid = appid
 if (!dryRun) await writeJsonAtomically(projectConfigPath, projectConfig)
 
 if (cloudEnvId !== undefined && !dryRun) {
-  await writeFile(cloudConfigPath, `// CloudBase is optional and never receives ledger data.\nexport const CLOUD_ENV_ID = ${JSON.stringify(cloudEnvId)}\n`, 'utf8')
+  await writeFile(cloudConfigPath, `// Local ledgers stay on-device. This environment is used only after the user\n// explicitly chooses “创建共享账单”.\nexport const CLOUD_ENV_ID = ${JSON.stringify(cloudEnvId)}\nexport const SHARED_ROOMS_ENABLED = Boolean(CLOUD_ENV_ID)\n`, 'utf8')
 }
 
 console.log(`${dryRun ? 'Validated' : 'Configured'} WeChat AppID ${appid}${cloudEnvId ? ` and CloudBase ${cloudEnvId}` : ''}.`)

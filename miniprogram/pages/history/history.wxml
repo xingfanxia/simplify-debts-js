@@ -1,16 +1,29 @@
 <view class="history-page {{themeClass}}">
   <view class="page-intro">
-    <text class="page-title">{{t.savedSettlements}}</text>
-    <text class="page-subtitle">{{t.historyPrivacy}}</text>
+    <text class="page-title">账单记录</text>
+    <text class="page-subtitle">本地结算保存在这台设备；共享账单从云端同步。</text>
   </view>
 
-  <view class="history-empty" wx:if="{{!entries.length}}">
+  <view class="history-empty" wx:if="{{!entries.length && !sharedEntries.length}}">
     <view class="empty-icon"><view></view><view></view><view></view></view>
     <text>{{t.noSavedTitle}}</text>
     <text>{{t.noSavedBody}}</text>
   </view>
 
-  <view class="history-list" wx:else>
+  <view class="history-section" wx:if="{{sharedEntries.length}}">
+    <view class="section-label"><text>共享账单</text><text>{{sharedEntries.length}}</text></view>
+    <view class="history-list">
+      <view class="history-entry shared-entry" wx:for="{{sharedEntries}}" wx:key="roomId">
+        <view class="entry-header"><view class="entry-heading"><view class="entry-date">{{item.statusText}} · {{item.currency}}</view><text class="entry-title">{{item.title}}</text></view></view>
+        <view class="entry-meta"><view><text>{{item.totalText}}</text><text>{{item.expenseText}} · {{item.membersText}}</text></view><view class="entry-avatars"><view wx:for="{{item.avatars}}" wx:for-item="avatar" wx:key="id">{{avatar.initials}}</view></view></view>
+        <view class="entry-actions"><button class="open-button" data-id="{{item.roomId}}" bindtap="openSharedRoom">打开共享账单 <text>→</text></button></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="history-section" wx:if="{{entries.length}}">
+    <view class="section-label"><text>{{t.savedSettlements}}</text><text>{{entries.length}}</text></view>
+    <view class="history-list">
     <view class="history-entry" wx:for="{{entries}}" wx:key="id">
       <view class="entry-header">
         <view class="entry-heading"><view class="entry-date">{{item.savedText}}</view><text class="entry-title">{{item.title}}</text></view>
@@ -23,6 +36,7 @@
       <view class="entry-actions">
         <button class="open-button" data-id="{{item.id}}" bindtap="openEntry">{{t.openPlan}} <text>→</text></button>
       </view>
+    </view>
     </view>
   </view>
   <view class="safe-bottom"></view>

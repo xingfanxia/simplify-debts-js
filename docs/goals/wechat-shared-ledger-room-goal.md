@@ -12,7 +12,7 @@
 - 基线：`main` 分支提交 `d3e0992`
 - 架构方案：`docs/wechat-shared-room-plan.md`
 - 当前小程序位于 `miniprogram/`，仅支持中文和多币种。
-- 当前云函数只有 `cloudfunctions/health`，共享房间尚未实现。
+- Goal 启动时云函数只有 `cloudfunctions/health`，共享房间尚未实现。
 - 参考项目：`/Users/xingfanxia/projects/side-projects/guandan-scorer-wxapp`
 - 只借鉴参考项目的房间生命周期、分享路径和版本控制，不复制“知道房间码即可读取”或“只有房主可编辑”的权限模型。
 - 默认产品决策：
@@ -93,7 +93,7 @@
 
 - 普通本地账单保持“仅本机保存”。
 - 共享账单清楚标注为云端同步。
-- 客户端响应、日志和错误信息不得包含 OpenID、邀请 token 原文、AppSecret 或私钥。
+- 客户端响应、日志和错误信息不得包含 OpenID、AppSecret 或私钥。`room_invite` 为生成微信分享路径而短暂返回邀请 token 是唯一例外；token 不得进入日志、错误信息或本地持久化。
 - 任何此前在聊天中出现过的 AppSecret 都视为已暴露；不得写入代码、配置或日志，真正需要使用前要求用户轮换。
 - 凭据首先从 `~/creds/wechat/` 查找，只通过环境或工具要求的安全路径使用，绝不提交进仓库。
 - 补充云端数据保留、退出、移除和删除行为说明。
@@ -119,7 +119,7 @@
 - 重放同一 mutation 不产生重复数据；
 - 两个成员基于相同 revision 并发修改时，其中一个得到明确冲突；
 - 金额、币种、字符串长度和数组大小等非法输入被拒绝；
-- 云函数响应不泄露 OpenID、token 或密钥。
+- 云函数响应不泄露 OpenID 或密钥；除 `room_invite` 的一次性分享路径外不返回 token，且任何 token 都不得进入日志或本地持久化。
 
 所有命令必须退出码为 0，且不得通过删除、跳过或弱化测试来获得通过。
 

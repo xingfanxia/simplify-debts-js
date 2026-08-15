@@ -122,6 +122,11 @@
         </view>
       </block>
 
+      <view class="shared-room-cta" wx:if="{{sharedRoomsEnabled && hasExpenses}}">
+        <view><text>{{t.createSharedBill}}</text><text>{{t.createSharedBillHelp}}</text></view>
+        <button bindtap="openCreateSharedRoom">{{t.createSharedBill}} <text>↗</text></button>
+      </view>
+
       <view class="rounding-control">
         <view><text>{{t.wholeRepayments}}</text><text>{{t.wholeRepaymentsHelp}}</text></view>
         <switch checked="{{state.roundToWhole}}" color="#24724d" bindchange="toggleRounding" />
@@ -137,6 +142,26 @@
       <view class="save-dialog-actions">
         <button class="save-cancel" bindtap="cancelSaveDialog">{{t.cancel}}</button>
         <button class="save-confirm" bindtap="confirmSaveAndStartNew">{{t.saveAndStartNew}}</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="save-dialog-backdrop" wx:if="{{showShareRoomDialog}}" bindtap="closeShareRoomDialog">
+    <view class="save-dialog share-room-dialog" catchtap="noop">
+      <text class="save-dialog-title">{{t.createSharedBill}}</text>
+      <text class="save-dialog-help">{{t.sharedUploadNotice}}</text>
+      <label class="dialog-label">{{t.sharedBillName}}</label>
+      <input class="save-title-input dialog-input" value="{{shareRoomTitleInput}}" maxlength="60" focus="{{showShareRoomDialog}}" bindinput="onShareRoomTitleInput" />
+      <label class="dialog-label">{{t.yourDisplayName}}</label>
+      <input class="save-title-input dialog-input" value="{{shareDisplayNameInput}}" maxlength="28" bindinput="onShareDisplayNameInput" />
+      <label class="dialog-label">{{t.claimYourself}}</label>
+      <picker range="{{shareOwnerNames}}" value="{{shareOwnerIndex}}" bindchange="onShareOwnerChange">
+        <view class="save-title-input dialog-input dialog-picker">{{shareOwnerNames[shareOwnerIndex]}} <text>⌄</text></view>
+      </picker>
+      <view class="cloud-notice"><view></view><text>{{t.sharedPrivacyNotice}}</text></view>
+      <view class="save-dialog-actions">
+        <button class="save-cancel" disabled="{{creatingSharedRoom}}" bindtap="closeShareRoomDialog">{{t.cancel}}</button>
+        <button class="save-confirm" loading="{{creatingSharedRoom}}" disabled="{{creatingSharedRoom}}" bindtap="confirmCreateSharedRoom">{{t.confirmCreateShared}}</button>
       </view>
     </view>
   </view>
