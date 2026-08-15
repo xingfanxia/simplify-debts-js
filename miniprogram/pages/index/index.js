@@ -2,6 +2,7 @@ import { simplifyDebts } from '../../lib/debts'
 import { detectCurrency, getMessages, translate } from '../../lib/i18n'
 import {
   createHistoryEntry,
+  CURRENCIES,
   EMPTY_STATE,
   getCurrentState,
   getHistory,
@@ -9,6 +10,7 @@ import {
   resolveTheme,
   saveCurrentState,
   saveHistory,
+  savePreferences,
 } from '../../lib/storage'
 
 const SYMBOLS = {
@@ -17,6 +19,15 @@ const SYMBOLS = {
 }
 const NO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW'])
 const AVATAR_CLASSES = ['avatar-coral', 'avatar-mint', 'avatar-blue', 'avatar-purple', 'avatar-accent']
+const CURRENCY_NAMES = {
+  USD: '美元', EUR: '欧元', GBP: '英镑', CAD: '加拿大元', AUD: '澳大利亚元', CNY: '人民币', JPY: '日元', KRW: '韩元',
+  MXN: '墨西哥比索', BRL: '巴西雷亚尔', TWD: '新台币', HKD: '港币', INR: '印度卢比',
+}
+const THEME_OPTIONS = [
+  { value: 'system', key: 'systemDefault', shortKey: 'systemShort' },
+  { value: 'light', key: 'light', shortKey: 'light' },
+  { value: 'dark', key: 'dark', shortKey: 'dark' },
+]
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
@@ -40,6 +51,11 @@ function formatMoney(amountCents, currency) {
   const digits = NO_DECIMAL_CURRENCIES.has(currency) ? 0 : 2
   const value = amount.toFixed(digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   return `${SYMBOLS[currency] || `${currency} `}${value}`
+}
+
+function formatDateTime(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 function defaultExpenseForm() {
@@ -87,11 +103,19 @@ Page({
     formError: '',
     totalSpendText: '¥0.00',
     expenseCountText: '0',
-    shareCanvasHeight: 760,
+    shareCanvasHeight: 520,
     hasExpenses: false,
     isEven: false,
     historyCount: 0,
     lastExportPath: '',
+    currencyValues: ['auto', ...CURRENCIES],
+    currencyLabels: [],
+    currencyIndex: 0,
+    themeLabels: [],
+    themeIndex: 0,
+    themeShortLabel: '',
+    showSaveDialog: false,
+    saveTitleInput: '',
   },
 
   onLoad() {
@@ -125,6 +149,8 @@ Page({
     const theme = resolveTheme(preferences.theme)
     const state = getCurrentState()
     const currency = preferences.currency === 'auto' ? detectCurrency() : preferences.currency
+    const currencyValues = ['auto', ...CURRENCIES]
+    const themeIndex = Math.max(0, THEME_OPTIONS.findIndex(({ value }) => value === preferences.theme))
     state.currency = currency
     saveCurrentState(state)
     getApp().globalData.theme = theme
@@ -136,6 +162,12 @@ Page({
       themeClass: theme === 'dark' ? 'theme-dark' : '',
       state,
       historyCount: getHistory().length,
+      currencyValues,
+      currencyLabels: [translate(language, 'automatic', { value: currency }), ...CURRENCIES.map((code) => `${CURRENCY_NAMES[code]}（${code}）`)],
+      currencyIndex: Math.max(0, currencyValues.indexOf(preferences.currency)),
+      themeLabels: THEME_OPTIONS.map(({ key }) => t[key]),
+      themeIndex,
+      themeShortLabel: t[THEME_OPTIONS[themeIndex].shortKey],
     }, () => this.recompute())
   },
 
@@ -192,7 +224,7 @@ Page({
       currency: state.currency,
       hasExpenses: state.expenses.length > 0,
       isEven: state.expenses.length > 0 && transfers.length === 0,
-      shareCanvasHeight: Math.max(760, 342 + transfers.length * 184 + Math.max(0, transfers.length - 1) * 16 + 88),
+      shareCanvasHeight: Math.max(520, 300 + transfers.length * 150 + Math.max(0, transfers.length - 1) * 14 + 62),
     })
   },
 
@@ -357,6 +389,20 @@ Page({
     this.persistState({ ...this.data.state, roundToWhole: event.detail.value })
   },
 
+  onCurrencyChange(event) {
+    const value = this.data.currencyValues[Number(event.detail.value)] || 'auto'
+    savePreferences({ currency: value })
+    const state = { ...this.data.state, currency: value === 'auto' ? detectCurrency() : value }
+    saveCurrentState(state)
+    this.refreshFromStorage()
+  },
+
+  onThemeChange(event) {
+    const value = THEME_OPTIONS[Number(event.detail.value)]?.value || 'system'
+    savePreferences({ theme: value })
+    this.refreshFromStorage()
+  },
+
   resetApp() {
     if (this.data.state.participants.length === 0) return
     wx.showModal({
@@ -372,10 +418,7 @@ Page({
   },
 
   defaultHistoryTitle() {
-    const first = this.data.state.expenses[0]?.description
-    const remainder = this.data.state.expenses.length - 1
-    if (first) return remainder > 0 ? `${first} +${remainder}` : first
-    return `${this.data.t.settlementPlan} · ${new Date().toLocaleDateString()}`
+    return formatDateTime()
   },
 
   saveAndStartNew() {
@@ -383,12 +426,26 @@ Page({
       wx.showToast({ title: this.data.t.addExpenseBeforeSave, icon: 'none' })
       return
     }
+    this.setData({ showSaveDialog: true, saveTitleInput: this.defaultHistoryTitle() })
+  },
+
+  onSaveTitleInput(event) {
+    this.setData({ saveTitleInput: event.detail.value })
+  },
+
+  cancelSaveDialog() {
+    this.setData({ showSaveDialog: false, saveTitleInput: '' })
+  },
+
+  noop() {},
+
+  confirmSaveAndStartNew() {
+    const title = this.data.saveTitleInput.trim().slice(0, 80) || this.defaultHistoryTitle()
     try {
-      const title = this.defaultHistoryTitle()
       const nextHistory = [createHistoryEntry(this.data.state, title), ...getHistory()].slice(0, 50)
       saveHistory(nextHistory)
       const nextState = { ...clone(EMPTY_STATE), currency: this.data.state.currency, roundToWhole: this.data.state.roundToWhole }
-      this.setData({ editingExpenseId: '', expenseForm: defaultExpenseForm(), historyCount: nextHistory.length })
+      this.setData({ editingExpenseId: '', expenseForm: defaultExpenseForm(), historyCount: nextHistory.length, showSaveDialog: false, saveTitleInput: '' })
       this.persistState(nextState)
       wx.pageScrollTo({ scrollTop: 0, duration: 240 })
       wx.showToast({ title: translate(this.data.language, 'savedAndStartedNew', { title }), icon: 'success', duration: 2200 })
@@ -399,10 +456,6 @@ Page({
 
   openHistory() {
     wx.navigateTo({ url: '/pages/history/history' })
-  },
-
-  openSettings() {
-    wx.navigateTo({ url: '/pages/settings/settings' })
   },
 
   settlementText() {
@@ -479,62 +532,57 @@ Page({
   drawSettlementCard(context, width, height) {
     const dark = this.data.themeClass === 'theme-dark'
     const colors = dark
-      ? { bg: '#111512', surface: '#1a201b', ink: '#f0f4f1', muted: '#a8b1aa', line: '#343d36', accent: '#7bd9a4', accentInk: '#102117', avatarInk: '#172019' }
-      : { bg: '#f5f6f4', surface: '#ffffff', ink: '#172019', muted: '#687169', line: '#dce1dc', accent: '#24724d', accentInk: '#ffffff', avatarInk: '#172019' }
+      ? { bg: '#111512', surface: '#1a201b', ink: '#f0f4f1', muted: '#a8b1aa', line: '#343d36', accent: '#7bd9a4', avatarInk: '#172019' }
+      : { bg: '#f5f6f4', surface: '#ffffff', ink: '#172019', muted: '#687169', line: '#d7ddd8', accent: '#24724d', avatarInk: '#172019' }
     context.fillStyle = colors.bg
     context.fillRect(0, 0, width, height)
     context.fillStyle = colors.ink
-    context.font = '700 52px sans-serif'
+    context.font = '700 48px sans-serif'
     context.textAlign = 'left'
-    context.fillText(this.data.t.settlementPlan, 44, 76, width - 88)
+    context.fillText(this.data.t.settlementPlan, 44, 70, width - 88)
     context.fillStyle = colors.muted
-    context.font = '600 25px sans-serif'
-    context.fillText(this.data.t.paymentFlow, 46, 113)
+    context.font = '600 22px sans-serif'
+    context.fillText(translate(this.data.language, 'shareOverview', {
+      repayments: this.data.transfersView.length,
+      people: this.data.state.participants.length,
+      currency: this.data.state.currency,
+    }), 46, 107, width - 92)
 
-    this.roundedRect(context, 44, 145, width - 88, 122, 24)
+    this.roundedRect(context, 44, 132, width - 88, 104, 20)
     context.fillStyle = colors.surface; context.fill()
     context.strokeStyle = colors.line; context.lineWidth = 1.5; context.stroke()
     const toMove = this.data.transfersView.reduce((sum, transfer) => sum + transfer.amountCents, 0)
-    const summary = [
-      [this.data.t.toMove, formatMoney(toMove, this.data.state.currency)],
-      [this.data.t.repayments, String(this.data.transfersView.length)],
-      [this.data.t.people, String(this.data.state.participants.length)],
-    ]
-    summary.forEach(([label, value], index) => {
-      const columnWidth = (width - 88) / 3
-      const x = 44 + index * columnWidth
-      if (index) {
-        context.beginPath(); context.moveTo(x, 167); context.lineTo(x, 245); context.strokeStyle = colors.line; context.lineWidth = 1; context.stroke()
-      }
-      context.textAlign = 'center'; context.fillStyle = colors.muted; context.font = '700 24px sans-serif'; context.fillText(label, x + columnWidth / 2, 190, columnWidth - 20)
-      context.fillStyle = colors.ink; context.font = '700 34px sans-serif'; context.fillText(value, x + columnWidth / 2, 239, columnWidth - 24)
-    })
-    context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 24px sans-serif'; context.fillText(this.data.t.paymentFlow, 44, 315)
-    context.textAlign = 'right'; context.fillText(this.data.state.currency, width - 44, 315)
+    context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 20px sans-serif'; context.fillText(this.data.t.toMove, 68, 167)
+    context.fillStyle = colors.ink; context.font = '700 36px sans-serif'; context.fillText(formatMoney(toMove, this.data.state.currency), 68, 215, 310)
+    context.beginPath(); context.moveTo(424, 152); context.lineTo(424, 216); context.strokeStyle = colors.line; context.lineWidth = 1; context.stroke()
+    context.textAlign = 'center'; context.fillStyle = colors.muted; context.font = '700 18px sans-serif'; context.fillText(this.data.t.repayments, 492, 168)
+    context.fillStyle = colors.ink; context.font = '700 30px sans-serif'; context.fillText(String(this.data.transfersView.length), 492, 211)
+    context.fillStyle = colors.muted; context.font = '700 18px sans-serif'; context.fillText(this.data.t.people, 600, 168)
+    context.fillStyle = colors.ink; context.font = '700 30px sans-serif'; context.fillText(String(this.data.state.participants.length), 600, 211)
+    context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 21px sans-serif'; context.fillText(this.data.t.paymentFlow, 44, 278)
+    context.textAlign = 'right'; context.fillText(this.data.state.currency, width - 44, 278)
 
     this.data.transfersView.forEach((transfer, index) => {
-      const rowY = 342 + index * 200
-      this.roundedRect(context, 44, rowY, width - 88, 184, 24)
+      const rowY = 300 + index * 164
+      this.roundedRect(context, 44, rowY, width - 88, 150, 20)
       context.fillStyle = colors.surface; context.fill(); context.strokeStyle = colors.line; context.lineWidth = 1.5; context.stroke()
-      context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 22px sans-serif'; context.fillText(translate(this.data.language, 'paymentNumber', { index: String(index + 1).padStart(2, '0') }), 68, rowY + 34)
-      this.drawCanvasAvatar(context, transfer.fromName, 94, rowY + 82, colors)
-      context.textAlign = 'left'; context.fillStyle = colors.ink; context.font = '700 31px sans-serif'; context.fillText(this.canvasName(transfer.fromName), 136, rowY + 92, 156)
-      this.drawCanvasArrow(context, width / 2, rowY + 82, colors)
-      this.drawCanvasAvatar(context, transfer.toName, 464, rowY + 82, colors)
-      context.textAlign = 'left'; context.fillStyle = colors.ink; context.font = '700 31px sans-serif'; context.fillText(this.canvasName(transfer.toName), 506, rowY + 92, 146)
-      context.beginPath(); context.moveTo(68, rowY + 120); context.lineTo(width - 68, rowY + 120); context.strokeStyle = colors.line; context.lineWidth = 1; context.stroke()
-      context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 22px sans-serif'; context.fillText(this.data.t.amount, 68, rowY + 160)
-      context.textAlign = 'right'; context.fillStyle = colors.ink; context.font = '700 38px sans-serif'; context.fillText(transfer.amountText, width - 68, rowY + 166)
+      context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 19px sans-serif'; context.fillText(translate(this.data.language, 'paymentNumber', { index: String(index + 1).padStart(2, '0') }), 66, rowY + 32)
+      context.textAlign = 'right'; context.fillStyle = colors.ink; context.font = '700 30px sans-serif'; context.fillText(transfer.amountText, width - 66, rowY + 37, 230)
+      context.beginPath(); context.moveTo(66, rowY + 52); context.lineTo(width - 66, rowY + 52); context.strokeStyle = colors.line; context.lineWidth = 1; context.stroke()
+      this.drawCanvasAvatar(context, transfer.fromName, 86, rowY + 101, colors)
+      context.textAlign = 'left'; context.fillStyle = colors.ink; context.font = '700 28px sans-serif'; context.fillText(this.canvasName(transfer.fromName), 122, rowY + 110, 154)
+      this.drawCanvasArrow(context, width / 2, rowY + 101, colors)
+      this.drawCanvasAvatar(context, transfer.toName, 464, rowY + 101, colors)
+      context.textAlign = 'left'; context.fillStyle = colors.ink; context.font = '700 28px sans-serif'; context.fillText(this.canvasName(transfer.toName), 500, rowY + 110, 148)
     })
-    context.textAlign = 'center'; context.fillStyle = colors.muted; context.font = '600 22px sans-serif'; context.fillText(this.data.t.madeWith, width / 2, height - 43, width - 88)
+    context.textAlign = 'center'; context.fillStyle = colors.muted; context.font = '600 19px sans-serif'; context.fillText(this.data.t.madeWith, width / 2, height - 30, width - 88)
   },
 
   drawCanvasAvatar(context, name, x, y, colors) {
     const fills = ['#e7b0a4', '#9ecbb1', '#aac7df', '#c8bddb', '#b8c9bc']
     const total = [...name].reduce((sum, character) => sum + character.charCodeAt(0), 0)
-    context.beginPath(); context.arc(x, y, 27, 0, Math.PI * 2); context.fillStyle = fills[total % fills.length]; context.fill()
-    context.strokeStyle = colors.avatarInk; context.lineWidth = 2; context.stroke()
-    context.fillStyle = colors.avatarInk; context.font = '700 16px sans-serif'; context.textAlign = 'center'; context.fillText(initials(name), x, y + 5)
+    context.beginPath(); context.arc(x, y, 24, 0, Math.PI * 2); context.fillStyle = fills[total % fills.length]; context.fill()
+    context.fillStyle = colors.avatarInk; context.font = '700 15px sans-serif'; context.textAlign = 'center'; context.fillText(initials(name), x, y + 5)
   },
 
   canvasName(name) {
@@ -543,9 +591,7 @@ Page({
   },
 
   drawCanvasArrow(context, centerX, centerY, colors) {
-    this.roundedRect(context, centerX - 33, centerY - 21, 66, 42, 21)
-    context.fillStyle = colors.accent; context.fill(); context.strokeStyle = colors.accentInk; context.lineWidth = 1.5; context.stroke()
-    context.beginPath(); context.moveTo(centerX - 15, centerY); context.lineTo(centerX + 16, centerY); context.moveTo(centerX + 7, centerY - 8); context.lineTo(centerX + 16, centerY); context.lineTo(centerX + 7, centerY + 8)
-    context.strokeStyle = colors.accentInk; context.lineWidth = 4.5; context.lineCap = 'round'; context.lineJoin = 'round'; context.stroke()
+    context.beginPath(); context.moveTo(centerX - 23, centerY); context.lineTo(centerX + 22, centerY); context.moveTo(centerX + 12, centerY - 9); context.lineTo(centerX + 22, centerY); context.lineTo(centerX + 12, centerY + 9)
+    context.strokeStyle = colors.accent; context.lineWidth = 4; context.lineCap = 'round'; context.lineJoin = 'round'; context.stroke()
   },
 })

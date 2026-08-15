@@ -12,14 +12,15 @@
 
   <view class="history-list" wx:else>
     <view class="history-entry" wx:for="{{entries}}" wx:key="id">
-      <view class="entry-date">{{item.savedText}}</view>
-      <text class="entry-title">{{item.title}}</text>
+      <view class="entry-header">
+        <view class="entry-heading"><view class="entry-date">{{item.savedText}}</view><text class="entry-title">{{item.title}}</text></view>
+        <button class="delete-button" data-id="{{item.id}}" bindtap="deleteEntry">{{t.delete}}</button>
+      </view>
       <view class="entry-meta">
         <view><text>{{item.totalText}}</text><text>{{item.state.expenses.length}} · {{t.activity}}</text></view>
         <view class="entry-avatars"><view wx:for="{{item.avatars}}" wx:for-item="avatar" wx:key="id">{{avatar.initials}}</view></view>
       </view>
       <view class="entry-actions">
-        <button class="delete-button" data-id="{{item.id}}" bindtap="deleteEntry">{{t.delete}}</button>
         <button class="open-button" data-id="{{item.id}}" bindtap="openEntry">{{t.openPlan}} <text>→</text></button>
       </view>
     </view>

@@ -47,8 +47,8 @@ Suggested privacy summary:
   2. Confirm that the settlement plan appears.
   3. Edit one expense and save it.
   4. Tap `分享结算图` and confirm the portrait card is readable.
-  5. Tap `保存并新建`, then reopen the saved plan from `历史`.
-  6. Change the currency and appearance from `设置`.
+  5. Tap `保存并新建`, name the settlement, then reopen it from `历史`.
+  6. Change the currency and appearance from the compact controls at the top of the main screen.
 
 ## Release commands
 

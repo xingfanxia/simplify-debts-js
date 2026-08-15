@@ -1,8 +1,13 @@
 <view class="app-shell {{themeClass}}">
   <view class="app-bar">
-    <view class="app-actions">
-      <button class="utility-button" bindtap="openHistory"><text class="utility-icon">↺</text><text>{{t.history}}</text><text class="history-count" wx:if="{{historyCount}}">{{historyCount}}</text></button>
-      <button class="utility-button" bindtap="openSettings"><text class="utility-icon">◐</text><text>{{t.settings}}</text></button>
+    <button class="history-button" bindtap="openHistory"><text>{{t.history}}</text><text class="history-count" wx:if="{{historyCount}}">{{historyCount}}</text></button>
+    <view class="quick-settings">
+      <picker class="quick-picker" range="{{currencyLabels}}" value="{{currencyIndex}}" bindchange="onCurrencyChange">
+        <view class="quick-setting"><text class="quick-label">{{t.currency}}</text><text>{{currency}}</text><text class="quick-chevron">⌄</text></view>
+      </picker>
+      <picker class="quick-picker" range="{{themeLabels}}" value="{{themeIndex}}" bindchange="onThemeChange">
+        <view class="quick-setting"><text class="quick-label">{{t.theme}}</text><text>{{themeShortLabel}}</text><text class="quick-chevron">⌄</text></view>
+      </picker>
     </view>
   </view>
 
@@ -104,15 +109,15 @@
           <view class="transfer-row" wx:for="{{transfersView}}" wx:key="key">
             <view class="transfer-people">
               <view class="person-side"><view class="avatar {{item.fromClass}}">{{item.fromInitials}}</view><text>{{item.fromName}}</text></view>
-              <view class="direction-chip"><view></view><text>›</text></view>
+              <view class="direction-line"><view></view><text>›</text></view>
               <view class="person-side person-side-right"><view class="avatar {{item.toClass}}">{{item.toInitials}}</view><text>{{item.toName}}</text></view>
             </view>
             <view class="transfer-amount"><text>{{t.onePayment}}</text><text>{{item.amountText}}</text></view>
           </view>
         </view>
         <view class="share-actions">
-          <button class="share-button" bindtap="copySettlementText"><text class="action-icon">T</text><text class="action-label">{{t.copyText}}</text></button>
           <button class="share-button share-image-button" bindtap="shareSettlementImage"><text class="action-icon">▧</text><text class="action-label">{{t.shareImage}}</text></button>
+          <button class="share-button" bindtap="copySettlementText"><text class="action-icon">T</text><text class="action-label">{{t.copyText}}</text></button>
           <button class="share-button" open-type="share"><text class="action-icon">↗</text><text class="action-label">{{t.shareMiniProgram}}</text></button>
         </view>
       </block>
@@ -120,6 +125,18 @@
       <view class="rounding-control">
         <view><text>{{t.wholeRepayments}}</text><text>{{t.wholeRepaymentsHelp}}</text></view>
         <switch checked="{{state.roundToWhole}}" color="#24724d" bindchange="toggleRounding" />
+      </view>
+    </view>
+  </view>
+
+  <view class="save-dialog-backdrop" wx:if="{{showSaveDialog}}" bindtap="cancelSaveDialog">
+    <view class="save-dialog" catchtap="noop">
+      <text class="save-dialog-title">{{t.nameSettlement}}</text>
+      <text class="save-dialog-help">{{t.nameSettlementHelp}}</text>
+      <input class="save-title-input" value="{{saveTitleInput}}" maxlength="80" focus="{{showSaveDialog}}" bindinput="onSaveTitleInput" confirm-type="done" bindconfirm="confirmSaveAndStartNew" />
+      <view class="save-dialog-actions">
+        <button class="save-cancel" bindtap="cancelSaveDialog">{{t.cancel}}</button>
+        <button class="save-confirm" bindtap="confirmSaveAndStartNew">{{t.saveAndStartNew}}</button>
       </view>
     </view>
   </view>

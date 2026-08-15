@@ -48,7 +48,7 @@ npm run mini:open
 ```
 
 After the IDE compiles without errors, use Preview for an actual WeChat device
-check. Verify both themes, the Chinese interface, expense editing, local
-History, automatic/manual currency switching, image sharing, and that no network request contains
-expense data. A sandbox preview is suitable for the developer account only; use
+check. Verify both themes, the Chinese interface, expense editing, the named
+save dialog and local History, inline automatic/manual currency switching,
+image sharing, and that no network request contains expense data. A sandbox preview is suitable for the developer account only; use
 the registered AppID before adding testers or uploading a release.
