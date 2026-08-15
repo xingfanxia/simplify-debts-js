@@ -31,12 +31,13 @@ remain on-device.
 
 After the registered AppID is attached to an authorized CloudBase environment,
 put its environment ID in `miniprogram/config/cloud.js`, create the private
-`ledger_*` collections, and deploy the `ledger` function. The shared entry stays
-hidden while the environment ID is empty.
+`ledger_*` collections, and deploy the `ledger` function. When the environment
+ID is empty, the shared mode is visibly unavailable while local mode remains usable.
 
 Shared-room identity comes from the Cloud Function's WeChat context. Users
-confirm only a room nickname; the mini program does not request or store WeChat
-avatars and renders initials locally.
+confirm only a room nickname. A room-scoped Emoji from a fixed 50-item
+animal/food allowlist is assigned automatically and can be changed later; the
+mini program never requests or stores real WeChat avatars.
 
 ```bash
 npm run mini:cloud:list
@@ -58,9 +59,11 @@ npm run mini:open
 ```
 
 After the IDE compiles without errors, use Preview for an actual WeChat device
-check. Verify both themes, the Chinese interface, expense editing, the named
-save dialog and local History, inline automatic/manual currency switching,
-image sharing, and that no network request contains expense data. A sandbox preview is suitable for the developer account only; use
+check. Verify both homepage modes, both themes, the Chinese interface, expense
+editing, the named save dialog, local History, inline currency switching,
+room-scoped Emoji, repeated image sharing, and that local mode makes no ledger
+network request. The current simulator evidence is recorded in
+[wechat-v2-visual-verification.md](./wechat-v2-visual-verification.md). A sandbox preview is suitable for the developer account only; use
 the registered AppID before adding testers or uploading a release.
 
 When shared rooms are enabled, additionally run the two-account checks in the

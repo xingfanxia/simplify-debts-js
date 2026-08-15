@@ -1,6 +1,6 @@
 # Settle
 
-Settle turns a group of shared expenses into a compact repayment plan. Everything is calculated and saved locally on the device—no account, database, analytics, or server-side processing required.
+Settle turns a group of shared expenses into a compact repayment plan. Local mode calculates and saves everything on-device with no account or network dependency. The Chinese WeChat mini program also offers an explicit opt-in shared-room mode backed by private CloudBase collections.
 
 ## What changed in v2
 
@@ -11,7 +11,7 @@ Settle turns a group of shared expenses into a compact repayment plan. Everythin
 - Added editable expenses, custom splits, multiple currencies, optional balanced whole-number rounding, arrow-formatted text and readable portrait PNG exports.
 - Added a versioned, device-local history library for naming, reopening, and deleting up to 50 settlement snapshots.
 - Added pure-local iOS and Android apps with native text/image clipboard and image sharing through Capacitor.
-- Added a native Chinese WeChat mini program with the same debt engine, local History, expense editing, automatic/manual currency selection, light/dark appearance settings, and portrait settlement image sharing.
+- Added a native Chinese WeChat mini program with a clear local/shared mode switch, the same debt engine, local History, expense editing, multi-currency support, light/dark appearance settings, stable room-scoped Emoji markers, and portrait settlement image sharing.
 - Added a persistent light/dark theme that follows the system preference on first visit.
 - Removed Express, serverless functions, CDN scripts, and the Graphviz runtime.
 
@@ -81,7 +81,7 @@ Each expense is distributed in integer cents across its selected participants. S
 
 ## Privacy
 
-Participant names, expenses, and saved history are stored only in local browser/app/WeChat storage by default. Android cloud backup is disabled and the Android app requests no internet permission. In the mini program, only an explicitly created or joined shared room synchronizes its nickname, membership, currency, and expenses through private CloudBase collections; ordinary ledgers are never uploaded. Clearing site/app/mini-program data or uninstalling the native app permanently removes local-only history, so export anything you need to keep first.
+Participant names, expenses, and saved history are stored only in local browser/app/WeChat storage by default. Android cloud backup is disabled and the Android app requests no internet permission. In the mini program, only an explicitly created or joined shared room synchronizes its nickname, allowlisted Emoji marker, membership, currency, and expenses through private CloudBase collections; ordinary ledgers are never uploaded. Real WeChat avatars are not collected. Clearing site/app/mini-program data or uninstalling the native app permanently removes local-only history, so export anything you need to keep first.
 
 ## License
 

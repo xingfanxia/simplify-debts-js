@@ -1,4 +1,5 @@
 import { getMessages, translate } from '../../lib/i18n'
+import { avatarPresentation } from '../../lib/avatar'
 import { getCurrentState, getHistory, getPreferences, resolveTheme, saveCurrentState, saveHistory } from '../../lib/storage'
 import { formatMinorMoney, getCachedRooms } from '../../lib/rooms'
 
@@ -15,10 +16,6 @@ function formatDate(iso) {
   if (!Number.isFinite(date.getTime())) return ''
   const pad = (value) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function initials(name) {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
 }
 
 Page({
@@ -44,7 +41,10 @@ Page({
       savedText: translate(language, 'savedOn', { date: formatDate(entry.savedAt) }),
       totalText: formatMoney(entry.state.expenses.reduce((sum, expense) => sum + expense.amountCents, 0), entry.state.currency),
       peopleText: translate(language, 'people', { count: entry.state.participants.length }),
-      avatars: entry.state.participants.slice(0, 4).map((person) => ({ id: person.id, initials: initials(person.name) })),
+      avatars: entry.state.participants.slice(0, 4).map((person) => ({
+        id: person.id,
+        ...avatarPresentation(person.avatarEmoji, `local-ledger:${person.id}`),
+      })),
     }))
     const sharedEntries = getCachedRooms().map(({ roomId, snapshot }) => ({
       roomId,
@@ -54,7 +54,10 @@ Page({
       totalText: formatMinorMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0), snapshot.room.currency),
       expenseText: `${snapshot.expenses.length} 笔支出`,
       membersText: `${snapshot.members.length} 位成员`,
-      avatars: snapshot.participants.slice(0, 4).map((person) => ({ id: person.participantId, initials: initials(person.name) })),
+      avatars: snapshot.participants.slice(0, 4).map((person) => ({
+        id: person.participantId,
+        ...avatarPresentation(person.avatarEmoji, `room:${roomId}:${person.participantId}`),
+      })),
     }))
     this.setData({
       language,

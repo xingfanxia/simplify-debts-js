@@ -104,8 +104,11 @@ function inviteToken(result) {
   return decodeURIComponent(result.sharePath.split('invite=')[1])
 }
 
-async function profileRequest(_service, mutationId, nickname) {
-  return { mutationId, profile: { nickname } }
+async function profileRequest(_service, mutationId, nickname, avatarEmoji) {
+  return {
+    mutationId,
+    profile: { nickname, ...(avatarEmoji === undefined ? {} : { avatarEmoji }) },
+  }
 }
 
 async function fixture(options = {}) {
@@ -177,7 +180,7 @@ describe('微信共享分账 V2 信任边界', () => {
     expect(await owner.execute({ ...create, displayName: '伪造身份' })).toEqual({ ok: false, error: 'legacy_identity_forbidden' })
   })
 
-  it('昵称必填且最多 28 个字符，不接收头像上传动作', async () => {
+  it('昵称必填且最多 28 个字符，只接收白名单内的单个 Emoji', async () => {
     const repository = createMemoryRepository()
     const owner = createLedgerService({ repository, openid: 'owner-openid', makeToken: tokenFactory() })
     expect(await owner.execute({
@@ -192,6 +195,53 @@ describe('微信共享分账 V2 信任边界', () => {
     })).toEqual({ ok: false, error: 'invalid_profile' })
     expect(await owner.execute({ action: 'avatar_prepare', mutationId: 'avatar-old-0001', extension: 'png' }))
       .toEqual({ ok: false, error: 'unknown_action' })
+    for (const avatarEmoji of ['🐶🐱', 'A', 'https://example.com/avatar.png', 'cloud://legacy/avatar.png']) {
+      expect(await owner.execute({
+        action: 'room_create', mutationId: `bad-avatar-${avatarEmoji.length}-${avatarEmoji.codePointAt(0)}`,
+        title: '坏 Emoji', currency: 'CNY', profile: { nickname: '房主', avatarEmoji },
+      })).toEqual({ ok: false, error: 'invalid_avatar' })
+    }
+  })
+
+  it('建房、加入和资料更新统一持久化 Emoji，自动分配优先避免重复', async () => {
+    const repository = createMemoryRepository()
+    const makeToken = tokenFactory()
+    const owner = createLedgerService({ repository, openid: 'owner-openid', makeToken })
+    const created = await owner.execute({
+      action: 'room_create', mutationId: 'emoji-create-0001', title: 'Emoji 账单', currency: 'CNY',
+      profile: { nickname: '房主', avatarEmoji: '🐶' },
+    })
+    expect(created.snapshot.self.avatarEmoji).toBe('🐶')
+    expect(created.snapshot.members[0].avatarEmoji).toBe('🐶')
+    expect(created.snapshot.participants[0].avatarEmoji).toBe('🐶')
+
+    const invite = await createInvite(owner, created.snapshot, 'emoji')
+    const guest = createLedgerService({ repository, openid: 'guest-openid', makeToken })
+    const joined = await guest.execute({
+      action: 'room_join', invite: inviteToken(invite), mutationId: 'emoji-join-00001', profile: { nickname: '朋友' },
+    })
+    expect(joined.snapshot.self.avatarEmoji).not.toBe('🐶')
+    const guestEmoji = joined.snapshot.self.avatarEmoji
+    expect(joined.snapshot.members.find(({ isSelf }) => isSelf)?.avatarEmoji).toBe(guestEmoji)
+    expect(joined.snapshot.participants.find(({ participantId }) => participantId === joined.snapshot.self.participantId)?.avatarEmoji).toBe(guestEmoji)
+
+    const changed = await guest.execute({
+      action: 'room_profile_update', roomId: joined.snapshot.room.roomId, baseRevision: joined.snapshot.room.revision,
+      mutationId: 'emoji-update-0001', profile: { nickname: '朋友', avatarEmoji: '🍎' },
+    })
+    expect(changed.ok).toBe(true)
+    const latest = (await guest.execute({ action: 'room_get', roomId: joined.snapshot.room.roomId })).snapshot
+    expect(latest.self.avatarEmoji).toBe('🍎')
+    expect(latest.members.find(({ isSelf }) => isSelf)?.avatarEmoji).toBe('🍎')
+    expect(latest.participants.find(({ participantId }) => participantId === latest.self.participantId)?.avatarEmoji).toBe('🍎')
+
+    const restored = await guest.execute({
+      action: 'room_profile_update', roomId: latest.room.roomId, baseRevision: latest.room.revision,
+      mutationId: 'emoji-restore-0001', profile: { nickname: '朋友', avatarEmoji: null },
+    })
+    expect(restored.ok).toBe(true)
+    const automatic = (await guest.execute({ action: 'room_get', roomId: latest.room.roomId })).snapshot.self.avatarEmoji
+    expect(automatic).not.toBe('🐶')
   })
 
   it('非成员伪造 OpenID、角色、memberId 或 participantId 均不能读写', async () => {
@@ -312,6 +362,7 @@ describe('微信共享分账 V2 信任边界', () => {
     const guest = service('leaving-openid')
     const joined = await joinWithProfile(guest, inviteToken(firstInvite), 'join-leave-00001', '会回来')
     const participantId = joined.snapshot.self.participantId
+    const formerAvatar = joined.snapshot.self.avatarEmoji
     const left = await guest.execute({
       action: 'room_manage', roomId: created.snapshot.room.roomId, baseRevision: joined.snapshot.room.revision,
       mutationId: 'leave-room-000001', kind: 'leave_room', payload: {},
@@ -319,10 +370,17 @@ describe('微信共享分账 V2 信任边界', () => {
     const staleProfile = await profileRequest(guest, 'rejoin-stale-0001', '会回来')
     expect(await guest.execute({ action: 'room_join', invite: inviteToken(firstInvite), ...staleProfile }))
       .toEqual({ ok: false, error: 'new_invite_required' })
-    const freshInvite = await createInvite(owner, { room: { ...created.snapshot.room, revision: left.revision } }, 'after-leave')
+    const occupancyInvite = await createInvite(owner, { room: { ...created.snapshot.room, revision: left.revision } }, 'occupy-former-avatar')
+    const newcomer = service('newcomer-openid')
+    const occupied = await newcomer.execute({
+      action: 'room_join', invite: inviteToken(occupancyInvite), mutationId: 'join-newcomer-0001',
+      profile: { nickname: '新成员', avatarEmoji: formerAvatar },
+    })
+    const freshInvite = await createInvite(owner, occupied.snapshot, 'after-leave')
     const rejoined = await joinWithProfile(guest, inviteToken(freshInvite), 'rejoin-fresh-0001', '回来了')
     expect(rejoined).toMatchObject({ ok: true, alreadyJoined: false })
     expect(rejoined.snapshot.self.participantId).toBe(participantId)
+    expect(rejoined.snapshot.self.avatarEmoji).not.toBe(formerAvatar)
     expect(rejoined.snapshot.participants.filter(({ participantId: id }) => id === participantId)).toHaveLength(1)
   })
 
@@ -356,7 +414,8 @@ describe('微信共享分账 V2 信任边界', () => {
     const invitation = await createInvite(owner, created.snapshot, 'profile')
     const guest = service('profile-openid')
     const joined = await joinWithProfile(guest, inviteToken(invitation), 'join-profile-0001', '旧昵称')
-    const profile = await profileRequest(guest, 'profile-update-001', '新昵称')
+    const ownerBefore = joined.snapshot.members.find(({ role }) => role === 'owner')
+    const profile = await profileRequest(guest, 'profile-update-001', '新昵称', '🍣')
     const updated = await guest.execute({
       action: 'room_profile_update', roomId: joined.snapshot.room.roomId, baseRevision: joined.snapshot.room.revision, ...profile,
       memberId: created.snapshot.self.memberId, participantId: created.snapshot.self.participantId,
@@ -364,8 +423,12 @@ describe('微信共享分账 V2 信任边界', () => {
     expect(updated.ok).toBe(true)
     const latest = (await guest.execute({ action: 'room_get', roomId: joined.snapshot.room.roomId })).snapshot
     expect(latest.self.displayName).toBe('新昵称')
+    expect(latest.self.avatarEmoji).toBe('🍣')
     expect(latest.participants.find(({ participantId }) => participantId === latest.self.participantId)?.name).toBe('新昵称')
-    expect(latest.members.find(({ role }) => role === 'owner')?.displayName).toBe('小浩')
+    expect(latest.participants.find(({ participantId }) => participantId === latest.self.participantId)?.avatarEmoji).toBe('🍣')
+    expect(latest.members.find(({ role }) => role === 'owner')).toMatchObject({
+      displayName: '小浩', avatarEmoji: ownerBefore.avatarEmoji,
+    })
   })
 
   it('邀请预览不泄露成员昵称、账单内容或内部标识', async () => {
@@ -560,9 +623,30 @@ describe('共享房间客户端边界', () => {
     const tamperedIdentity = structuredClone(latest)
     tamperedIdentity.participants[0].memberId = 'forged-member'
     expect(parseRoomSnapshot(tamperedIdentity)).toBeNull()
+    const tamperedAvatar = structuredClone(latest)
+    tamperedAvatar.participants[0].avatarEmoji = 'https://example.com/avatar.png'
+    expect(parseRoomSnapshot(tamperedAvatar)).toBeNull()
+    const mismatchedAvatar = structuredClone(latest)
+    mismatchedAvatar.participants[0].avatarEmoji = '🐶'
+    mismatchedAvatar.members.find(({ participantId }) => participantId === mismatchedAvatar.participants[0].participantId).avatarEmoji = '🐱'
+    expect(parseRoomSnapshot(mismatchedAvatar)).toBeNull()
   })
 
-  it('客户端只调用 ledger 云函数，身份资料只确认昵称', () => {
+  it('兼容没有 Emoji 的旧快照，并稳定补齐成员、参与人和 self', async () => {
+    const { created } = await fixture()
+    const legacy = structuredClone(created.snapshot)
+    delete legacy.self.avatarEmoji
+    legacy.members.forEach((member) => delete member.avatarEmoji)
+    legacy.participants.forEach((participant) => delete participant.avatarEmoji)
+    const first = parseRoomSnapshot(legacy)
+    const second = parseRoomSnapshot(legacy)
+    expect(first).not.toBeNull()
+    expect(second).toEqual(first)
+    expect(first.self.avatarEmoji).toBe(first.members[0].avatarEmoji)
+    expect(first.self.avatarEmoji).toBe(first.participants[0].avatarEmoji)
+  })
+
+  it('客户端只调用 ledger 云函数，房间资料只包含昵称和 Emoji', () => {
     const clientSource = readFileSync(new URL('../miniprogram/lib/rooms.js', import.meta.url), 'utf8')
     const pageSource = readFileSync(new URL('../miniprogram/pages/room/room.js', import.meta.url), 'utf8')
     const roomTemplate = readFileSync(new URL('../miniprogram/pages/room/room.wxml', import.meta.url), 'utf8')
@@ -572,7 +656,12 @@ describe('共享房间客户端边界', () => {
     expect(pageSource).not.toMatch(/\.database\s*\(/)
     expect(pageSource).not.toMatch(/console\.(?:log|error).*invite/i)
     expect(roomTemplate).toMatch(/type="nickname"/)
-    expect(roomTemplate).not.toMatch(/chooseAvatar|认领|claimableParticipants/)
+    expect(roomTemplate).toMatch(/chooseProfileAvatar/)
+    expect(roomTemplate).toMatch(/shareSettlementImage/)
+    expect(roomTemplate).toMatch(/copySettlementText/)
+    expect(pageSource).toMatch(/from '..\/..\/lib\/settlement-image'/)
+    expect(indexSource).toMatch(/from '..\/..\/lib\/settlement-image'/)
+    expect(roomTemplate).not.toMatch(/认领|claimableParticipants|open-type="chooseAvatar"/)
     expect(indexSource).toMatch(/pendingRoomCreate/)
   })
 
@@ -582,7 +671,12 @@ describe('共享房间客户端边界', () => {
     const indexTemplate = readFileSync(new URL('../miniprogram/pages/index/index.wxml', import.meta.url), 'utf8')
     expect(configSource).toMatch(/SHARED_ROOMS_ENABLED\s*=\s*Boolean\(CLOUD_ENV_ID\)/)
     expect(appSource).toMatch(/if \(CLOUD_ENV_ID && wx\.cloud\)/)
-    expect(indexTemplate).toMatch(/wx:if="\{\{sharedRoomsEnabled\}\}"/)
+    expect(indexTemplate).toMatch(/data-mode="local"/)
+    expect(indexTemplate).toMatch(/data-mode="shared"/)
+    expect(indexTemplate).toMatch(/wx:if="\{\{workspaceMode === 'local'\}\}"/)
+    expect(indexTemplate).toMatch(/wx:if="\{\{!sharedRoomsEnabled\}\}"/)
+    expect(indexTemplate).toMatch(/confirmCreateSharedRoom/)
+    expect(indexTemplate).not.toMatch(/shared-launcher|showShareRoomDialog/)
     expect(indexTemplate).not.toMatch(/sharedRoomsEnabled && hasExpenses/)
   })
 

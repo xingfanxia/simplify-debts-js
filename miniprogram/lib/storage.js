@@ -1,3 +1,5 @@
+import { ensureParticipantAvatars, isAvatarEmoji } from './avatar'
+
 export const CURRENT_STATE_KEY = 'settle-app-state-v2'
 export const HISTORY_KEY = 'settle-history-v1'
 export const PREFERENCES_KEY = 'settle-mini-preferences-v1'
@@ -15,6 +17,7 @@ export const EMPTY_STATE = {
 const DEFAULT_PREFERENCES = {
   currency: 'auto',
   theme: 'system',
+  sharedNickname: '',
 }
 
 function clone(value) {
@@ -27,9 +30,13 @@ function isRecord(value) {
 
 export function parseAppState(value) {
   if (!isRecord(value) || !Array.isArray(value.participants) || !Array.isArray(value.expenses)) return null
-  const participants = value.participants.filter((person) => (
+  const participants = ensureParticipantAvatars(value.participants.filter((person) => (
     isRecord(person) && typeof person.id === 'string' && typeof person.name === 'string' && person.name.trim()
-  )).map((person) => ({ id: person.id, name: person.name.trim().slice(0, 28) }))
+  )).map((person) => ({
+    id: person.id,
+    name: person.name.trim().slice(0, 28),
+    ...(isAvatarEmoji(person.avatarEmoji) ? { avatarEmoji: person.avatarEmoji } : {}),
+  })), 'local-ledger')
   const ids = new Set(participants.map(({ id }) => id))
   const expenses = value.expenses.filter((expense) => (
     isRecord(expense)
@@ -69,33 +76,42 @@ export function saveCurrentState(state) {
   const parsed = parseAppState(state)
   if (!parsed) throw new Error('Invalid Settle state')
   wx.setStorageSync(CURRENT_STATE_KEY, parsed)
+  return parsed
+}
+
+function parseHistoryEntry(entry) {
+  if (!isRecord(entry) || typeof entry.id !== 'string' || typeof entry.title !== 'string' || typeof entry.savedAt !== 'string') return null
+  const state = parseAppState(entry.state)
+  const title = entry.title.trim().slice(0, 80)
+  return state && title ? { id: entry.id, title, savedAt: entry.savedAt, state } : null
 }
 
 export function getHistory() {
   try {
     const store = wx.getStorageSync(HISTORY_KEY)
     if (!isRecord(store) || store.version !== 1 || !Array.isArray(store.entries)) return []
-    return store.entries.map((entry) => {
-      if (!isRecord(entry) || typeof entry.id !== 'string' || typeof entry.title !== 'string' || typeof entry.savedAt !== 'string') return null
-      const state = parseAppState(entry.state)
-      const title = entry.title.trim().slice(0, 80)
-      return state && title ? { id: entry.id, title, savedAt: entry.savedAt, state } : null
-    }).filter(Boolean).slice(0, MAX_HISTORY_ENTRIES)
+    return store.entries.map(parseHistoryEntry).filter(Boolean).slice(0, MAX_HISTORY_ENTRIES)
   } catch (_error) {
     return []
   }
 }
 
 export function saveHistory(entries) {
-  wx.setStorageSync(HISTORY_KEY, { version: 1, entries: entries.slice(0, MAX_HISTORY_ENTRIES) })
+  const parsedEntries = Array.isArray(entries)
+    ? entries.map(parseHistoryEntry).filter(Boolean).slice(0, MAX_HISTORY_ENTRIES)
+    : []
+  wx.setStorageSync(HISTORY_KEY, { version: 1, entries: parsedEntries })
+  return parsedEntries
 }
 
 export function createHistoryEntry(state, title) {
+  const parsedState = parseAppState(state)
+  if (!parsedState) throw new Error('Invalid Settle state')
   return {
     id: `history-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title: title.trim().slice(0, 80),
     savedAt: new Date().toISOString(),
-    state: clone(state),
+    state: clone(parsedState),
   }
 }
 
@@ -106,6 +122,7 @@ export function getPreferences() {
     return {
       currency: value.currency === 'auto' || CURRENCIES.includes(value.currency) ? value.currency : 'auto',
       theme: ['system', 'light', 'dark'].includes(value.theme) ? value.theme : 'system',
+      sharedNickname: typeof value.sharedNickname === 'string' ? [...value.sharedNickname.trim()].slice(0, 28).join('') : '',
     }
   } catch (_error) {
     return { ...DEFAULT_PREFERENCES }
@@ -113,7 +130,17 @@ export function getPreferences() {
 }
 
 export function savePreferences(preferences) {
-  wx.setStorageSync(PREFERENCES_KEY, { ...getPreferences(), ...preferences })
+  const current = getPreferences()
+  const updates = isRecord(preferences) ? preferences : {}
+  const value = {
+    currency: updates.currency === 'auto' || CURRENCIES.includes(updates.currency) ? updates.currency : current.currency,
+    theme: ['system', 'light', 'dark'].includes(updates.theme) ? updates.theme : current.theme,
+    sharedNickname: typeof updates.sharedNickname === 'string'
+      ? [...updates.sharedNickname.trim()].slice(0, 28).join('')
+      : current.sharedNickname,
+  }
+  wx.setStorageSync(PREFERENCES_KEY, value)
+  return value
 }
 
 export function getSystemLocale() {

@@ -1,6 +1,8 @@
 import { simplifyDebts } from '../../lib/debts'
+import { AVATAR_EMOJIS, automaticAvatarEmoji, avatarPresentation, randomAvatarEmoji } from '../../lib/avatar'
 import { getMessages } from '../../lib/i18n'
-import { CURRENCIES, getPreferences, resolveTheme } from '../../lib/storage'
+import { drawSettlementCard, exportSettlementImage, settlementCanvasHeight } from '../../lib/settlement-image'
+import { CURRENCIES, getPreferences, resolveTheme, savePreferences } from '../../lib/storage'
 import {
   RoomError,
   callLedger,
@@ -18,17 +20,7 @@ import {
   snapshotToDebtState,
 } from '../../lib/rooms'
 
-const AVATAR_CLASSES = ['avatar-coral', 'avatar-mint', 'avatar-blue', 'avatar-purple']
 const POLL_INTERVAL_MS = 2500
-
-function initials(name) {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
-}
-
-function avatarClass(name) {
-  const total = [...name].reduce((sum, character) => sum + character.charCodeAt(0), 0)
-  return AVATAR_CLASSES[total % AVATAR_CLASSES.length]
-}
 
 function formatExpiry(iso) {
   const date = new Date(iso)
@@ -64,6 +56,7 @@ function errorText(error) {
     currency_precision_change: '已有共享支出时，不能在整数币种与两位小数币种之间切换。',
     invalid_display_name: '请输入 1–28 个字符的昵称。',
     invalid_profile: '请输入你的昵称。',
+    invalid_avatar: '请选择列表中的 Emoji。',
     legacy_identity_forbidden: '加入流程已经更新，请重新打开邀请。',
     expense_not_found: '这笔支出已被删除，账单已为你刷新。',
     duplicate_participant: '账单中已有同名参与人。',
@@ -107,6 +100,10 @@ Page({
     mutating: false,
     showProfileDialog: false,
     profileNicknameInput: '',
+    profileAvatarEmoji: '',
+    profileAvatarMode: 'selected',
+    profileChoosingAvatar: false,
+    avatarOptions: AVATAR_EMOJIS,
     updatingProfile: false,
     invitePreparing: false,
     inviteReady: false,
@@ -116,6 +113,8 @@ Page({
     currencyValues: CURRENCIES,
     currencyIndex: CURRENCIES.indexOf('CNY'),
     inviteListView: [],
+    shareCanvasHeight: 520,
+    lastExportPath: '',
   },
 
   onLoad(options = {}) {
@@ -186,7 +185,7 @@ Page({
       this.setData({
         mode: 'preview',
         preview,
-        joinNickname: '',
+        joinNickname: getPreferences().sharedNickname || '',
       })
       wx.setNavigationBarTitle({ title: '加入共享账单' })
       if (preview.alreadyJoined) this.joinRoom()
@@ -221,6 +220,7 @@ Page({
         request.profile = { nickname }
       }
       const result = await callLedger('room_join', request)
+      if (!alreadyJoined && nickname) savePreferences({ sharedNickname: nickname })
       this.pendingJoin = null
       this.inviteToken = ''
       const snapshot = saveRoomCache(result.snapshot)
@@ -331,8 +331,7 @@ Page({
     const selected = new Set(this.data.expenseForm.selectedIds)
     const participantsView = snapshot.participants.filter(({ memberActive }) => memberActive).map((participant) => ({
       ...participant,
-      initials: initials(participant.name),
-      avatarClass: avatarClass(participant.name),
+      ...avatarPresentation(participant.avatarEmoji, participant.participantId),
       selected: selected.has(participant.participantId),
     }))
     const expensesView = snapshot.expenses.map((expense) => {
@@ -354,13 +353,16 @@ Page({
         key: `${transfer.from}-${transfer.to}-${index}`,
         fromName: from?.name || '某人',
         toName: to?.name || '某人',
+        fromAvatarEmoji: from?.avatarEmoji,
+        toAvatarEmoji: to?.avatarEmoji,
+        fromClass: avatarPresentation(from?.avatarEmoji, transfer.from).avatarClass,
+        toClass: avatarPresentation(to?.avatarEmoji, transfer.to).avatarClass,
         amountText: formatMinorMoney(transfer.amountCents, state.currency),
       }
     })
     const membersView = snapshot.members.map((member) => ({
       ...member,
-      initials: initials(member.displayName),
-      avatarClass: avatarClass(member.displayName),
+      ...avatarPresentation(member.avatarEmoji, member.participantId),
       roleText: member.role === 'owner' ? '房主' : '成员',
       canRemove: this.data.canManage && member.role !== 'owner' && !member.isSelf,
       canEditProfile: member.isSelf && !this.data.readOnly,
@@ -380,6 +382,66 @@ Page({
       inviteListView,
       totalSpendText: formatMinorMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0), state.currency),
       payerIndex: Math.max(0, participantsView.findIndex(({ participantId }) => participantId === this.data.expenseForm.paidBy)),
+      shareCanvasHeight: settlementCanvasHeight(transfersView),
+    })
+  },
+
+  settlementText() {
+    const lines = this.data.transfersView.map((transfer) => `${transfer.fromName} → ${transfer.toName} · ${transfer.amountText}`)
+    return `结算方案\n\n${lines.join('\n')}`
+  },
+
+  copySettlementText() {
+    wx.setClipboardData({
+      data: this.settlementText(),
+      success: () => wx.showToast({ title: '结算文字已复制', icon: 'success' }),
+    })
+  },
+
+  async shareSettlementImage() {
+    if (!this.data.snapshot || this.data.transfersView.length === 0) return
+    wx.showLoading({ title: '正在生成结算图…', mask: true })
+    try {
+      const path = await this.renderSettlementImage()
+      wx.hideLoading()
+      if (wx.showShareImageMenu) {
+        wx.showShareImageMenu({ path })
+      } else {
+        wx.previewImage({ current: path, urls: [path] })
+      }
+    } catch (_error) {
+      wx.hideLoading()
+      wx.showToast({ title: '结算图生成失败', icon: 'none' })
+    }
+  },
+
+  renderSettlementImage() {
+    const snapshot = this.data.snapshot
+    const transfers = this.data.transfersView
+    const toMove = transfers.reduce((sum, transfer) => sum + transfer.amountCents, 0)
+    return exportSettlementImage(this, {
+      height: this.data.shareCanvasHeight,
+      draw: (context, width, height) => drawSettlementCard(context, {
+        width,
+        height,
+        dark: this.data.themeClass === 'theme-dark',
+        title: '结算方案',
+        overview: `${transfers.length} 笔还款 · ${snapshot.participants.length} 人 · ${snapshot.room.currency}`,
+        toMoveText: formatMinorMoney(toMove, snapshot.room.currency),
+        peopleCount: snapshot.participants.length,
+        currency: snapshot.room.currency,
+        transfers,
+        labels: {
+          toMove: '待转金额',
+          repayments: '还款笔数',
+          people: '人数',
+          paymentFlow: '付款路径',
+          footer: '共享账单 · 仅当前成员可见',
+        },
+      }),
+    }).then((path) => {
+      this.setData({ lastExportPath: path })
+      return path
     })
   },
 
@@ -567,17 +629,48 @@ Page({
     this.setData({
       showProfileDialog: true,
       profileNicknameInput: this.data.snapshot.self.displayName,
+      profileAvatarEmoji: this.data.snapshot.self.avatarEmoji,
+      profileAvatarMode: 'selected',
+      profileChoosingAvatar: false,
     })
   },
 
   closeProfileDialog() {
     if (this.data.updatingProfile) return
     this.pendingProfileUpdate = null
-    this.setData({ showProfileDialog: false, profileNicknameInput: '' })
+    this.setData({ showProfileDialog: false, profileNicknameInput: '', profileAvatarEmoji: '', profileChoosingAvatar: false })
   },
 
   onProfileNicknameInput(event) {
     this.setData({ profileNicknameInput: event.detail.value })
+  },
+
+  toggleProfileAvatarPicker() {
+    this.setData({ profileChoosingAvatar: !this.data.profileChoosingAvatar })
+  },
+
+  chooseProfileAvatar(event) {
+    this.setData({ profileAvatarEmoji: event.currentTarget.dataset.emoji, profileAvatarMode: 'selected' })
+  },
+
+  profileUsedAvatars() {
+    if (!this.data.snapshot) return []
+    return this.data.snapshot.participants
+      .filter(({ participantId }) => participantId !== this.data.snapshot.self.participantId)
+      .map(({ avatarEmoji }) => avatarEmoji)
+  },
+
+  randomizeProfileAvatar() {
+    this.setData({ profileAvatarEmoji: randomAvatarEmoji(this.profileUsedAvatars()), profileAvatarMode: 'selected' })
+  },
+
+  restoreProfileAvatar() {
+    const self = this.data.snapshot?.self
+    if (!self) return
+    this.setData({
+      profileAvatarEmoji: automaticAvatarEmoji(`room:${this.data.roomId}:${self.participantId}`, this.profileUsedAvatars()),
+      profileAvatarMode: 'auto',
+    })
   },
 
   async updateProfile() {
@@ -587,7 +680,8 @@ Page({
       wx.showToast({ title: '请输入你的昵称', icon: 'none' })
       return
     }
-    const fingerprint = JSON.stringify([this.data.roomId, nickname])
+    const avatarEmoji = this.data.profileAvatarMode === 'auto' ? null : this.data.profileAvatarEmoji
+    const fingerprint = JSON.stringify([this.data.roomId, nickname, avatarEmoji])
     if (!this.pendingProfileUpdate || this.pendingProfileUpdate.fingerprint !== fingerprint) {
       this.pendingProfileUpdate = { fingerprint, mutationId: makeMutationId('profile') }
     }
@@ -597,12 +691,12 @@ Page({
         roomId: this.data.roomId,
         baseRevision: this.data.snapshot.room.revision,
         mutationId: this.pendingProfileUpdate.mutationId,
-        profile: { nickname },
+        profile: { nickname, avatarEmoji },
       })
       this.pendingProfileUpdate = null
-      this.setData({ updatingProfile: false, showProfileDialog: false, profileNicknameInput: '' })
+      this.setData({ updatingProfile: false, showProfileDialog: false, profileNicknameInput: '', profileAvatarEmoji: '', profileChoosingAvatar: false })
       await this.loadRoom({ silent: true })
-      wx.showToast({ title: '昵称已更新', icon: 'success' })
+      wx.showToast({ title: '资料已更新', icon: 'success' })
     } catch (error) {
       if (!['network_error', 'empty_response'].includes(error.code)) this.pendingProfileUpdate = null
       this.setData({ updatingProfile: false })

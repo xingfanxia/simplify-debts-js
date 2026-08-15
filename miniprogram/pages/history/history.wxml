@@ -15,7 +15,7 @@
     <view class="history-list">
       <view class="history-entry shared-entry" wx:for="{{sharedEntries}}" wx:key="roomId">
         <view class="entry-header"><view class="entry-heading"><view class="entry-date">{{item.statusText}} · {{item.currency}}</view><text class="entry-title">{{item.title}}</text></view></view>
-        <view class="entry-meta"><view><text>{{item.totalText}}</text><text>{{item.expenseText}} · {{item.membersText}}</text></view><view class="entry-avatars"><view wx:for="{{item.avatars}}" wx:for-item="avatar" wx:key="id">{{avatar.initials}}</view></view></view>
+        <view class="entry-meta"><view><text>{{item.totalText}}</text><text>{{item.expenseText}} · {{item.membersText}}</text></view><view class="entry-avatars"><view class="{{avatar.avatarClass}}" wx:for="{{item.avatars}}" wx:for-item="avatar" wx:key="id">{{avatar.avatarEmoji}}</view></view></view>
         <view class="entry-actions"><button class="open-button" data-id="{{item.roomId}}" bindtap="openSharedRoom">打开共享账单 <text>→</text></button></view>
       </view>
     </view>
@@ -31,7 +31,7 @@
       </view>
       <view class="entry-meta">
         <view><text>{{item.totalText}}</text><text>{{item.state.expenses.length}} · {{t.activity}}</text></view>
-        <view class="entry-avatars"><view wx:for="{{item.avatars}}" wx:for-item="avatar" wx:key="id">{{avatar.initials}}</view></view>
+        <view class="entry-avatars"><view class="{{avatar.avatarClass}}" wx:for="{{item.avatars}}" wx:for-item="avatar" wx:key="id">{{avatar.avatarEmoji}}</view></view>
       </view>
       <view class="entry-actions">
         <button class="open-button" data-id="{{item.id}}" bindtap="openEntry">{{t.openPlan}} <text>→</text></button>

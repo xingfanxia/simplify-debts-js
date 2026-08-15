@@ -1,4 +1,5 @@
 const crypto = require('node:crypto')
+const { automaticAvatarEmoji, ensureParticipantAvatars, isAvatarEmoji } = require('./avatar')
 
 const CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CNY', 'JPY', 'KRW', 'MXN', 'BRL', 'TWD', 'HKD', 'INR'])
 const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW'])
@@ -83,11 +84,12 @@ function normalizeState(value) {
     assert(isRecord(participant), 'invalid_participant')
     const id = cleanString(participant.id, 96, 'invalid_participant')
     const name = cleanString(participant.name, LIMITS.participantName, 'invalid_participant')
+    assert(participant.avatarEmoji === undefined || isAvatarEmoji(participant.avatarEmoji), 'invalid_avatar')
     const normalizedName = name.toLocaleLowerCase()
     assert(!participantIds.has(id) && !participantNames.has(normalizedName), 'duplicate_participant')
     participantIds.add(id)
     participantNames.add(normalizedName)
-    return { id, name }
+    return { id, name, ...(isAvatarEmoji(participant.avatarEmoji) ? { avatarEmoji: participant.avatarEmoji } : {}) }
   })
 
   const expenseIds = new Set()
@@ -106,7 +108,7 @@ function normalizeState(value) {
   })
 
   return {
-    participants,
+    participants: ensureParticipantAvatars(participants, 'normalized-ledger'),
     expenses,
     currency: value.currency,
     roundToWhole: value.roundToWhole === true,
@@ -141,9 +143,18 @@ function rejectLegacyIdentity(event) {
 
 function normalizeProfile(event) {
   assert(isRecord(event.profile), 'invalid_profile')
-  assert(Object.keys(event.profile).every((key) => key === 'nickname'), 'invalid_profile')
+  assert(Object.keys(event.profile).every((key) => ['nickname', 'avatarEmoji'].includes(key)), 'invalid_profile')
   const displayName = cleanString(event.profile.nickname, LIMITS.displayName, 'invalid_display_name')
-  return { displayName }
+  const avatarProvided = Object.prototype.hasOwnProperty.call(event.profile, 'avatarEmoji')
+  const avatarEmoji = avatarProvided ? event.profile.avatarEmoji : null
+  assert(!avatarProvided || avatarEmoji === null || isAvatarEmoji(avatarEmoji), 'invalid_avatar')
+  return { displayName, avatarEmoji, avatarProvided }
+}
+
+function resolveProfileAvatar(profile, seed, usedEmojis, existingAvatar = '') {
+  if (profile.avatarProvided && isAvatarEmoji(profile.avatarEmoji)) return profile.avatarEmoji
+  if (!profile.avatarProvided && isAvatarEmoji(existingAvatar)) return existingAvatar
+  return automaticAvatarEmoji(seed, usedEmojis)
 }
 
 function memberAuthId(hash, roomId, openid) {
@@ -208,6 +219,25 @@ function createLedgerService({
     const expenses = await tx.listExpenses(room._id)
     const invites = self.role === 'owner' ? await tx.listInvites(room._id) : []
     const activeMembers = members.filter(active).sort(sortByCreated)
+    const activeMemberIds = new Set(activeMembers.map(({ memberId }) => memberId))
+    const avatarCandidates = participants.filter(active).sort(sortByCreated).map((participant) => {
+      const member = activeMembers.find(({ participantId }) => participantId === participant.participantId)
+      return {
+        participantId: participant.participantId,
+        name: participant.name,
+        memberId: participant.memberId || participant.claimedByMemberId || '',
+        memberActive: activeMemberIds.has(participant.memberId || participant.claimedByMemberId || ''),
+        avatarEmoji: isAvatarEmoji(participant.avatarEmoji) ? participant.avatarEmoji : member?.avatarEmoji,
+      }
+    })
+    const visibleParticipants = ensureParticipantAvatars(avatarCandidates, `room:${room._id}`).map((participant) => ({
+      participantId: participant.participantId,
+      name: participant.name,
+      memberId: participant.memberId || participant.claimedByMemberId || '',
+      memberActive: activeMemberIds.has(participant.memberId || participant.claimedByMemberId || ''),
+      avatarEmoji: participant.avatarEmoji,
+    }))
+    const avatarByParticipantId = new Map(visibleParticipants.map(({ participantId, avatarEmoji }) => [participantId, avatarEmoji]))
     const visibleMembers = activeMembers.map((member) => ({
       memberId: member.memberId,
       displayName: member.displayName,
@@ -215,13 +245,7 @@ function createLedgerService({
       participantId: member.participantId || '',
       joinedAt: member.joinedAt,
       isSelf: member.memberId === self.memberId,
-    }))
-    const activeMemberIds = new Set(activeMembers.map(({ memberId }) => memberId))
-    const visibleParticipants = participants.filter(active).sort(sortByCreated).map((participant) => ({
-      participantId: participant.participantId,
-      name: participant.name,
-      memberId: participant.memberId || participant.claimedByMemberId || '',
-      memberActive: activeMemberIds.has(participant.memberId || participant.claimedByMemberId || ''),
+      avatarEmoji: avatarByParticipantId.get(member.participantId) || automaticAvatarEmoji(`room:${room._id}:${member.participantId}`),
     }))
     const visibleExpenses = expenses.filter(active).sort(sortByCreated).map((expense) => ({
       expenseId: expense.expenseId,
@@ -250,6 +274,7 @@ function createLedgerService({
         role: self.role,
         participantId: self.participantId || '',
         canManage: self.role === 'owner',
+        avatarEmoji: avatarByParticipantId.get(self.participantId) || automaticAvatarEmoji(`room:${room._id}:${self.participantId}`),
       },
       members: visibleMembers,
       participants: visibleParticipants,
@@ -288,11 +313,13 @@ function createLedgerService({
       const roomId = id('room', 18)
       const ownerMemberId = id('member')
       const ownerParticipantId = id('person')
+      const ownerAvatarEmoji = resolveProfileAvatar(profile, `room:${roomId}:${ownerParticipantId}`, [])
       const ownerParticipant = {
         _id: entityDocId(hash, 'participant', roomId, ownerParticipantId),
         roomId,
         participantId: ownerParticipantId,
         name: profile.displayName,
+        avatarEmoji: ownerAvatarEmoji,
         memberId: ownerMemberId,
         createdAt,
         deletedAt: null,
@@ -318,6 +345,7 @@ function createLedgerService({
         roomId,
         memberId: ownerMemberId,
         displayName: profile.displayName,
+        avatarEmoji: ownerAvatarEmoji,
         role: 'owner',
         participantId: ownerParticipantId,
         joinedAt: createdAt,
@@ -503,11 +531,24 @@ function createLedgerService({
       assert(participants.length < LIMITS.participants || Boolean(existing && existing.participantId), 'participant_limit')
       const participantId = existing && existing.participantId ? existing.participantId : id('person')
       const memberId = existing && existing.memberId ? existing.memberId : id('member')
+      const existingParticipant = participants.find((item) => item.participantId === participantId)
+      const usedAvatars = participants
+        .filter((item) => item.participantId !== participantId)
+        .map(({ avatarEmoji }) => avatarEmoji)
+        .filter(isAvatarEmoji)
+      const existingAvatar = existingParticipant?.avatarEmoji || existing?.avatarEmoji
+      const avatarEmoji = resolveProfileAvatar(
+        profile,
+        `room:${room._id}:${participantId}`,
+        usedAvatars,
+        isAvatarEmoji(existingAvatar) && !usedAvatars.includes(existingAvatar) ? existingAvatar : '',
+      )
       const member = {
         _id: authId,
         roomId: room._id,
         memberId,
         displayName: profile.displayName,
+        avatarEmoji,
         role: 'editor',
         participantId,
         joinedAt: currentTime,
@@ -515,10 +556,10 @@ function createLedgerService({
         revokedReason: null,
         revokedAtRevision: null,
       }
-      const existingParticipant = participants.find((item) => item.participantId === participantId)
       const participantDocument = existingParticipant ? {
         ...existingParticipant,
         name: profile.displayName,
+        avatarEmoji,
         memberId,
         claimedByMemberId: null,
         deletedAt: null,
@@ -527,6 +568,7 @@ function createLedgerService({
           roomId: room._id,
           participantId,
           name: profile.displayName,
+          avatarEmoji,
           memberId,
           createdAt: currentTime,
           deletedAt: null,
@@ -566,8 +608,18 @@ function createLedgerService({
       const participants = await tx.listParticipants(roomId)
       const participant = participants.find((item) => item.participantId === member.participantId && active(item))
       assert(participant, 'participant_not_found')
-      await tx.putMember({ ...member, displayName: profile.displayName })
-      await tx.putParticipant({ ...participant, name: profile.displayName, memberId: member.memberId, claimedByMemberId: null })
+      const usedAvatars = participants
+        .filter((item) => item.participantId !== participant.participantId && active(item))
+        .map(({ avatarEmoji }) => avatarEmoji)
+        .filter(isAvatarEmoji)
+      const avatarEmoji = resolveProfileAvatar(
+        profile,
+        `room:${roomId}:${participant.participantId}`,
+        usedAvatars,
+        participant.avatarEmoji || member.avatarEmoji,
+      )
+      await tx.putMember({ ...member, displayName: profile.displayName, avatarEmoji })
+      await tx.putParticipant({ ...participant, name: profile.displayName, avatarEmoji, memberId: member.memberId, claimedByMemberId: null })
       const nextRoom = { ...room, revision: room.revision + 1, updatedAt: currentTime }
       await tx.putRoom(nextRoom)
       await tx.putMutation({

@@ -1,6 +1,13 @@
 import { simplifyDebts } from '../../lib/debts'
+import {
+  AVATAR_EMOJIS,
+  automaticAvatarEmoji,
+  avatarPresentation,
+  randomAvatarEmoji,
+} from '../../lib/avatar'
 import { detectCurrency, getMessages, translate } from '../../lib/i18n'
 import { callLedger, getCachedRooms, isZeroDecimalCurrency, makeMutationId, parseAmountMinor, saveRoomCache, sharedRoomsAvailable } from '../../lib/rooms'
+import { drawSettlementCard, exportSettlementImage, settlementCanvasHeight } from '../../lib/settlement-image'
 import {
   createHistoryEntry,
   CURRENCIES,
@@ -18,7 +25,6 @@ const SYMBOLS = {
   USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩',
   MXN: 'MX$', BRL: 'R$', TWD: 'NT$', INR: '₹', HKD: 'HK$',
 }
-const AVATAR_CLASSES = ['avatar-coral', 'avatar-mint', 'avatar-blue', 'avatar-purple', 'avatar-accent']
 const CURRENCY_NAMES = {
   USD: '美元', EUR: '欧元', GBP: '英镑', CAD: '加拿大元', AUD: '澳大利亚元', CNY: '人民币', JPY: '日元', KRW: '韩元',
   MXN: '墨西哥比索', BRL: '巴西雷亚尔', TWD: '新台币', HKD: '港币', INR: '印度卢比',
@@ -35,15 +41,6 @@ function clone(value) {
 
 function makeId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function initials(name) {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
-}
-
-function avatarClass(name) {
-  const total = [...name].reduce((sum, character) => sum + character.charCodeAt(0), 0)
-  return AVATAR_CLASSES[total % AVATAR_CLASSES.length]
 }
 
 function formatMoney(amountCents, currency) {
@@ -91,9 +88,14 @@ function sharedRoomError(error) {
     duplicate_participant: '参与人姓名不能重复。',
     invalid_display_name: '请输入 1–28 个字符的昵称。',
     invalid_profile: '请输入你的昵称。',
+    invalid_avatar: '请选择列表中的 Emoji。',
     legacy_identity_forbidden: '共享账单流程已更新，请重新创建。',
   }
   return messages[error && error.code] || '创建共享账单失败，请稍后重试。'
+}
+
+function sharedDraftAvatar(title, nickname) {
+  return automaticAvatarEmoji(`shared-draft:${title.trim()}:${nickname.trim()}`)
 }
 
 function localizedExample(language, currency, roundToWhole) {
@@ -147,12 +149,20 @@ Page({
     themeShortLabel: '',
     showSaveDialog: false,
     saveTitleInput: '',
+    workspaceMode: 'local',
     sharedRoomsEnabled: false,
-    showShareRoomDialog: false,
     shareRoomTitleInput: '',
     shareNicknameInput: '',
+    shareAvatarEmoji: sharedDraftAvatar('', ''),
+    shareAvatarCustomized: false,
     shareCurrencyIndex: CURRENCIES.indexOf('CNY'),
     creatingSharedRoom: false,
+    avatarOptions: AVATAR_EMOJIS,
+    showAvatarPicker: false,
+    avatarPickerContext: '',
+    avatarPickerTargetId: '',
+    avatarPickerTargetName: '',
+    avatarPickerSelected: '',
   },
 
   onLoad() {
@@ -188,6 +198,11 @@ Page({
     const currency = preferences.currency === 'auto' ? detectCurrency() : preferences.currency
     const currencyValues = ['auto', ...CURRENCIES]
     const themeIndex = Math.max(0, THEME_OPTIONS.findIndex(({ value }) => value === preferences.theme))
+    const shareRoomTitleInput = this.data.shareRoomTitleInput || this.defaultSharedRoomTitle()
+    const shareNicknameInput = this.data.shareNicknameInput || preferences.sharedNickname || ''
+    const shareAvatarEmoji = this.data.shareAvatarCustomized
+      ? this.data.shareAvatarEmoji
+      : sharedDraftAvatar(shareRoomTitleInput, shareNicknameInput)
     state = normalizeCurrencyPrecision(state, currency)
     saveCurrentState(state)
     getApp().globalData.theme = theme
@@ -206,6 +221,12 @@ Page({
       themeIndex,
       themeShortLabel: t[THEME_OPTIONS[themeIndex].shortKey],
       sharedRoomsEnabled: sharedRoomsAvailable(),
+      shareRoomTitleInput,
+      shareNicknameInput,
+      shareAvatarEmoji,
+      shareCurrencyIndex: this.data.shareRoomTitleInput
+        ? this.data.shareCurrencyIndex
+        : Math.max(0, CURRENCIES.indexOf(state.currency)),
     }, () => this.recompute())
   },
 
@@ -215,8 +236,7 @@ Page({
     const peopleById = new Map(state.participants.map((person) => [person.id, person]))
     const participantsView = state.participants.map((person) => ({
       ...person,
-      initials: initials(person.name),
-      avatarClass: avatarClass(person.name),
+      ...avatarPresentation(person.avatarEmoji, person.id),
       selected: this.data.expenseForm.selectedIds.includes(person.id),
     }))
     const expensesView = state.expenses.map((expense) => {
@@ -242,10 +262,10 @@ Page({
         key: `${transfer.from}-${transfer.to}-${index}`,
         fromName: from.name,
         toName: to.name,
-        fromInitials: initials(from.name),
-        toInitials: initials(to.name),
-        fromClass: avatarClass(from.name),
-        toClass: avatarClass(to.name),
+        fromAvatarEmoji: from.avatarEmoji,
+        toAvatarEmoji: to.avatarEmoji,
+        fromClass: avatarPresentation(from.avatarEmoji, from.id).avatarClass,
+        toClass: avatarPresentation(to.avatarEmoji, to.id).avatarClass,
         amountText: formatMoney(transfer.amountCents, state.currency),
       }
     })
@@ -263,13 +283,84 @@ Page({
       amountPlaceholder: isZeroDecimalCurrency(state.currency) ? '0' : '0.00',
       hasExpenses: state.expenses.length > 0,
       isEven: state.expenses.length > 0 && transfers.length === 0,
-      shareCanvasHeight: Math.max(520, 300 + transfers.length * 150 + Math.max(0, transfers.length - 1) * 14 + 62),
+      shareCanvasHeight: settlementCanvasHeight(transfersView),
     })
   },
 
   persistState(nextState) {
-    saveCurrentState(nextState)
-    this.setData({ state: nextState }, () => this.recompute())
+    const savedState = saveCurrentState(nextState)
+    this.setData({ state: savedState }, () => this.recompute())
+  },
+
+  selectWorkspaceMode(event) {
+    const workspaceMode = event.currentTarget.dataset.mode === 'shared' ? 'shared' : 'local'
+    this.setData({ workspaceMode })
+  },
+
+  avatarPickerUsedEmojis() {
+    if (this.data.avatarPickerContext !== 'local') return []
+    return this.data.state.participants
+      .filter(({ id }) => id !== this.data.avatarPickerTargetId)
+      .map(({ avatarEmoji }) => avatarEmoji)
+  },
+
+  openLocalAvatarPicker(event) {
+    const participant = this.data.state.participants.find(({ id }) => id === event.currentTarget.dataset.id)
+    if (!participant) return
+    this.setData({
+      showAvatarPicker: true,
+      avatarPickerContext: 'local',
+      avatarPickerTargetId: participant.id,
+      avatarPickerTargetName: participant.name,
+      avatarPickerSelected: participant.avatarEmoji,
+    })
+  },
+
+  openSharedAvatarPicker() {
+    this.setData({
+      showAvatarPicker: true,
+      avatarPickerContext: 'shared-create',
+      avatarPickerTargetId: '',
+      avatarPickerTargetName: this.data.shareNicknameInput.trim() || '你的标记',
+      avatarPickerSelected: this.data.shareAvatarEmoji,
+    })
+  },
+
+  closeAvatarPicker() {
+    this.setData({
+      showAvatarPicker: false,
+      avatarPickerContext: '',
+      avatarPickerTargetId: '',
+      avatarPickerTargetName: '',
+      avatarPickerSelected: '',
+    })
+  },
+
+  applyAvatarEmoji(avatarEmoji, { customized = true } = {}) {
+    if (this.data.avatarPickerContext === 'local') {
+      const participants = this.data.state.participants.map((participant) => (
+        participant.id === this.data.avatarPickerTargetId ? { ...participant, avatarEmoji } : participant
+      ))
+      this.persistState({ ...this.data.state, participants })
+    } else if (this.data.avatarPickerContext === 'shared-create') {
+      this.setData({ shareAvatarEmoji: avatarEmoji, shareAvatarCustomized: customized })
+    }
+    this.closeAvatarPicker()
+  },
+
+  chooseAvatarEmoji(event) {
+    this.applyAvatarEmoji(event.currentTarget.dataset.emoji)
+  },
+
+  randomizeAvatarEmoji() {
+    this.applyAvatarEmoji(randomAvatarEmoji(this.avatarPickerUsedEmojis()))
+  },
+
+  restoreAutomaticAvatar() {
+    const seed = this.data.avatarPickerContext === 'local'
+      ? `local-ledger:${this.data.avatarPickerTargetId}`
+      : `shared-draft:${this.data.shareRoomTitleInput.trim()}:${this.data.shareNicknameInput.trim()}`
+    this.applyAvatarEmoji(automaticAvatarEmoji(seed, this.avatarPickerUsedEmojis()), { customized: false })
   },
 
   onNameInput(event) {
@@ -497,41 +588,37 @@ Page({
     wx.navigateTo({ url: '/pages/history/history' })
   },
 
-  openCreateSharedRoom() {
-    if (!this.data.sharedRoomsEnabled) {
-      wx.showToast({ title: this.data.t.sharedUnavailable, icon: 'none' })
-      return
-    }
+  defaultSharedRoomTitle() {
     const date = new Date()
-    const title = `${date.getMonth() + 1}月${date.getDate()}日分账`
-    this.pendingRoomCreate = null
-    this.setData({
-      showShareRoomDialog: true,
-      shareRoomTitleInput: title,
-      shareNicknameInput: '',
-      shareCurrencyIndex: Math.max(0, CURRENCIES.indexOf(this.data.state.currency)),
-    })
+    return `${date.getMonth() + 1}月${date.getDate()}日分账`
   },
 
   onShareRoomTitleInput(event) {
-    this.setData({ shareRoomTitleInput: event.detail.value })
+    const shareRoomTitleInput = event.detail.value
+    this.setData({
+      shareRoomTitleInput,
+      ...(!this.data.shareAvatarCustomized ? { shareAvatarEmoji: sharedDraftAvatar(shareRoomTitleInput, this.data.shareNicknameInput) } : {}),
+    })
   },
 
   onShareNicknameInput(event) {
-    this.setData({ shareNicknameInput: event.detail.value })
+    const shareNicknameInput = event.detail.value
+    this.setData({
+      shareNicknameInput,
+      ...(!this.data.shareAvatarCustomized ? { shareAvatarEmoji: sharedDraftAvatar(this.data.shareRoomTitleInput, shareNicknameInput) } : {}),
+    })
   },
 
   onShareCurrencyChange(event) {
     this.setData({ shareCurrencyIndex: Number(event.detail.value) })
   },
 
-  closeShareRoomDialog() {
-    if (this.data.creatingSharedRoom) return
-    this.setData({ showShareRoomDialog: false })
-  },
-
   async confirmCreateSharedRoom() {
     if (this.data.creatingSharedRoom) return
+    if (!this.data.sharedRoomsEnabled) {
+      wx.showToast({ title: this.data.t.sharedUnavailable, icon: 'none' })
+      return
+    }
     const title = this.data.shareRoomTitleInput.trim()
     const nickname = this.data.shareNicknameInput.trim()
     const currency = CURRENCIES[this.data.shareCurrencyIndex] || this.data.state.currency
@@ -543,7 +630,8 @@ Page({
       wx.showToast({ title: '请输入你的昵称', icon: 'none' })
       return
     }
-    const request = { title, currency, nickname }
+    const avatarEmoji = this.data.shareAvatarEmoji
+    const request = { title, currency, nickname, avatarEmoji }
     const fingerprint = JSON.stringify(request)
     if (!this.pendingRoomCreate || this.pendingRoomCreate.fingerprint !== fingerprint) {
       this.pendingRoomCreate = { fingerprint, mutationId: makeMutationId('room-create') }
@@ -554,12 +642,13 @@ Page({
         title,
         currency,
         roundToWhole: false,
-        profile: { nickname },
+        profile: { nickname, avatarEmoji },
         mutationId: this.pendingRoomCreate.mutationId,
       })
       this.pendingRoomCreate = null
       const snapshot = saveRoomCache(result.snapshot)
-      this.setData({ creatingSharedRoom: false, showShareRoomDialog: false })
+      savePreferences({ sharedNickname: nickname })
+      this.setData({ creatingSharedRoom: false })
       wx.navigateTo({ url: `/pages/room/room?roomId=${encodeURIComponent(snapshot.room.roomId)}` })
     } catch (error) {
       if (!['network_error', 'empty_response'].includes(error.code)) this.pendingRoomCreate = null
@@ -598,110 +687,36 @@ Page({
   },
 
   renderSettlementImage() {
-    return new Promise((resolve, reject) => {
-      wx.createSelectorQuery().in(this).select('#shareCanvas').fields({ node: true, size: true }).exec((result) => {
-        const canvas = result?.[0]?.node
-        if (!canvas) {
-          reject(new Error('Canvas unavailable'))
-          return
-        }
-        const width = 720
-        const height = this.data.shareCanvasHeight
-        const scale = 2
-        canvas.width = width * scale
-        canvas.height = height * scale
-        const context = canvas.getContext('2d')
-        context.scale(scale, scale)
-        this.drawSettlementCard(context, width, height)
-        wx.canvasToTempFilePath({
-          canvas,
-          fileType: 'png',
-          destWidth: width * scale,
-          destHeight: height * scale,
-          success: ({ tempFilePath }) => {
-            this.setData({ lastExportPath: tempFilePath })
-            resolve(tempFilePath)
-          },
-          fail: reject,
-        })
-      })
+    const state = this.data.state
+    const transfers = this.data.transfersView
+    const toMove = transfers.reduce((sum, transfer) => sum + transfer.amountCents, 0)
+    return exportSettlementImage(this, {
+      height: this.data.shareCanvasHeight,
+      draw: (context, width, height) => drawSettlementCard(context, {
+        width,
+        height,
+        dark: this.data.themeClass === 'theme-dark',
+        title: this.data.t.settlementPlan,
+        overview: translate(this.data.language, 'shareOverview', {
+          repayments: transfers.length,
+          people: state.participants.length,
+          currency: state.currency,
+        }),
+        toMoveText: formatMoney(toMove, state.currency),
+        peopleCount: state.participants.length,
+        currency: state.currency,
+        transfers,
+        labels: {
+          toMove: this.data.t.toMove,
+          repayments: this.data.t.repayments,
+          people: this.data.t.people,
+          paymentFlow: this.data.t.paymentFlow,
+          footer: this.data.t.madeWith,
+        },
+      }),
+    }).then((path) => {
+      this.setData({ lastExportPath: path })
+      return path
     })
-  },
-
-  roundedRect(context, x, y, width, height, radius) {
-    const r = Math.min(radius, width / 2, height / 2)
-    context.beginPath()
-    context.moveTo(x + r, y)
-    context.arcTo(x + width, y, x + width, y + height, r)
-    context.arcTo(x + width, y + height, x, y + height, r)
-    context.arcTo(x, y + height, x, y, r)
-    context.arcTo(x, y, x + width, y, r)
-    context.closePath()
-  },
-
-  drawSettlementCard(context, width, height) {
-    const dark = this.data.themeClass === 'theme-dark'
-    const colors = dark
-      ? { bg: '#111512', surface: '#1a201b', ink: '#f0f4f1', muted: '#a8b1aa', line: '#343d36', accent: '#7bd9a4', avatarInk: '#172019' }
-      : { bg: '#f5f6f4', surface: '#ffffff', ink: '#172019', muted: '#687169', line: '#d7ddd8', accent: '#24724d', avatarInk: '#172019' }
-    context.fillStyle = colors.bg
-    context.fillRect(0, 0, width, height)
-    context.fillStyle = colors.ink
-    context.font = '700 48px sans-serif'
-    context.textAlign = 'left'
-    context.fillText(this.data.t.settlementPlan, 44, 70, width - 88)
-    context.fillStyle = colors.muted
-    context.font = '600 22px sans-serif'
-    context.fillText(translate(this.data.language, 'shareOverview', {
-      repayments: this.data.transfersView.length,
-      people: this.data.state.participants.length,
-      currency: this.data.state.currency,
-    }), 46, 107, width - 92)
-
-    this.roundedRect(context, 44, 132, width - 88, 104, 20)
-    context.fillStyle = colors.surface; context.fill()
-    context.strokeStyle = colors.line; context.lineWidth = 1.5; context.stroke()
-    const toMove = this.data.transfersView.reduce((sum, transfer) => sum + transfer.amountCents, 0)
-    context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 20px sans-serif'; context.fillText(this.data.t.toMove, 68, 167)
-    context.fillStyle = colors.ink; context.font = '700 36px sans-serif'; context.fillText(formatMoney(toMove, this.data.state.currency), 68, 215, 310)
-    context.beginPath(); context.moveTo(424, 152); context.lineTo(424, 216); context.strokeStyle = colors.line; context.lineWidth = 1; context.stroke()
-    context.textAlign = 'center'; context.fillStyle = colors.muted; context.font = '700 18px sans-serif'; context.fillText(this.data.t.repayments, 492, 168)
-    context.fillStyle = colors.ink; context.font = '700 30px sans-serif'; context.fillText(String(this.data.transfersView.length), 492, 211)
-    context.fillStyle = colors.muted; context.font = '700 18px sans-serif'; context.fillText(this.data.t.people, 600, 168)
-    context.fillStyle = colors.ink; context.font = '700 30px sans-serif'; context.fillText(String(this.data.state.participants.length), 600, 211)
-    context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 21px sans-serif'; context.fillText(this.data.t.paymentFlow, 44, 278)
-    context.textAlign = 'right'; context.fillText(this.data.state.currency, width - 44, 278)
-
-    this.data.transfersView.forEach((transfer, index) => {
-      const rowY = 300 + index * 164
-      this.roundedRect(context, 44, rowY, width - 88, 150, 20)
-      context.fillStyle = colors.surface; context.fill(); context.strokeStyle = colors.line; context.lineWidth = 1.5; context.stroke()
-      context.textAlign = 'left'; context.fillStyle = colors.muted; context.font = '700 19px sans-serif'; context.fillText(translate(this.data.language, 'paymentNumber', { index: String(index + 1).padStart(2, '0') }), 66, rowY + 32)
-      context.textAlign = 'right'; context.fillStyle = colors.ink; context.font = '700 30px sans-serif'; context.fillText(transfer.amountText, width - 66, rowY + 37, 230)
-      context.beginPath(); context.moveTo(66, rowY + 52); context.lineTo(width - 66, rowY + 52); context.strokeStyle = colors.line; context.lineWidth = 1; context.stroke()
-      this.drawCanvasAvatar(context, transfer.fromName, 86, rowY + 101, colors)
-      context.textAlign = 'left'; context.fillStyle = colors.ink; context.font = '700 28px sans-serif'; context.fillText(this.canvasName(transfer.fromName), 122, rowY + 110, 154)
-      this.drawCanvasArrow(context, width / 2, rowY + 101, colors)
-      this.drawCanvasAvatar(context, transfer.toName, 464, rowY + 101, colors)
-      context.textAlign = 'left'; context.fillStyle = colors.ink; context.font = '700 28px sans-serif'; context.fillText(this.canvasName(transfer.toName), 500, rowY + 110, 148)
-    })
-    context.textAlign = 'center'; context.fillStyle = colors.muted; context.font = '600 19px sans-serif'; context.fillText(this.data.t.madeWith, width / 2, height - 30, width - 88)
-  },
-
-  drawCanvasAvatar(context, name, x, y, colors) {
-    const fills = ['#e7b0a4', '#9ecbb1', '#aac7df', '#c8bddb', '#b8c9bc']
-    const total = [...name].reduce((sum, character) => sum + character.charCodeAt(0), 0)
-    context.beginPath(); context.arc(x, y, 24, 0, Math.PI * 2); context.fillStyle = fills[total % fills.length]; context.fill()
-    context.fillStyle = colors.avatarInk; context.font = '700 15px sans-serif'; context.textAlign = 'center'; context.fillText(initials(name), x, y + 5)
-  },
-
-  canvasName(name) {
-    const characters = [...name.trim()]
-    return characters.length > 9 ? `${characters.slice(0, 8).join('')}…` : name.trim()
-  },
-
-  drawCanvasArrow(context, centerX, centerY, colors) {
-    context.beginPath(); context.moveTo(centerX - 23, centerY); context.lineTo(centerX + 22, centerY); context.moveTo(centerX + 12, centerY - 9); context.lineTo(centerX + 22, centerY); context.lineTo(centerX + 12, centerY + 9)
-    context.strokeStyle = colors.accent; context.lineWidth = 4; context.lineCap = 'round'; context.lineJoin = 'round'; context.stroke()
   },
 })

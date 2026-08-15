@@ -22,13 +22,15 @@
 .entry-meta text:first-child { font-size: 30rpx; font-weight: 750; }
 .entry-meta text:last-child { margin-top: 4rpx; color: var(--muted); font-size: 25rpx; }
 .entry-avatars { display: flex; flex-direction: row-reverse; padding-left: 18rpx; }
-.entry-avatars view { display: flex; align-items: center; justify-content: center; width: 46rpx; height: 46rpx; margin-left: -10rpx; color: #183126; font-size: 16rpx; font-weight: 750; background: var(--mint); border: 3rpx solid var(--surface); border-radius: 50%; }
-.entry-avatars view:nth-child(2) { background: var(--blue); }
-.entry-avatars view:nth-child(3) { background: var(--coral); }
-.entry-avatars view:nth-child(4) { background: var(--purple); }
-.delete-button { flex: 0 0 112rpx; width: 112rpx; min-width: 112rpx; height: 68rpx; margin: 0; padding: 0; color: var(--danger); font-size: 25rpx; font-weight: 650; line-height: 68rpx; background: transparent; border: 2rpx solid var(--line); border-radius: 12rpx; }
+.entry-avatars view { display: flex; align-items: center; justify-content: center; width: 50rpx; height: 50rpx; margin-left: -8rpx; font-size: 28rpx; line-height: 1; border: 3rpx solid var(--surface); border-radius: 50%; }
+.avatar-coral { background: var(--coral); }
+.avatar-mint { background: var(--mint); }
+.avatar-blue { background: var(--blue); }
+.avatar-purple { background: var(--purple); }
+.avatar-accent { background: var(--accent); }
+.delete-button { flex: 0 0 112rpx; width: 112rpx !important; min-width: 112rpx; height: 68rpx; margin: 0 !important; padding: 0; color: var(--danger); font-size: 25rpx; font-weight: 650; line-height: 68rpx; background: transparent; border: 2rpx solid var(--line); border-radius: 12rpx; }
 .entry-actions { width: 100%; margin-top: 16rpx; }
-.open-button { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 86rpx; margin: 0; padding: 0 22rpx; color: var(--primary-ink); font-size: 28rpx; font-weight: 700; line-height: 86rpx; background: var(--primary); border-radius: 14rpx; }
+.open-button { display: flex; width: 100% !important; min-width: 0; height: 86rpx; margin: 0 !important; padding: 0 22rpx; align-items: center; justify-content: space-between; color: var(--primary-ink); font-size: 28rpx; font-weight: 700; line-height: 86rpx; background: var(--primary); border-radius: 14rpx; }
 .shared-entry .entry-date { color: var(--primary); }
 .history-empty { display: flex; flex-direction: column; align-items: center; padding: 96rpx 30rpx; text-align: center; }
 .empty-icon { width: 82rpx; height: 82rpx; padding: 22rpx 18rpx; box-sizing: border-box; background: var(--accent); border-radius: 50%; }

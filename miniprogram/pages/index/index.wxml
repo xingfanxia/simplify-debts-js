@@ -11,15 +11,16 @@
     </view>
   </view>
 
-  <view class="shared-launcher" wx:if="{{sharedRoomsEnabled}}">
-    <view class="shared-launcher-copy">
-      <text class="shared-launcher-title">和朋友一起记账</text>
-      <text class="shared-launcher-help">新建空白账单，发到微信群后一起添加支出。</text>
-    </view>
-    <button bindtap="openCreateSharedRoom"><text>新建共享账单</text><text>→</text></button>
+  <view class="workspace-switch" aria-label="选择分账方式">
+    <button class="workspace-option {{workspaceMode === 'local' ? 'is-active' : ''}}" data-mode="local" bindtap="selectWorkspaceMode">
+      <text class="workspace-title">本地快速分账</text><text class="workspace-help">只保存在本机</text>
+    </button>
+    <button class="workspace-option {{workspaceMode === 'shared' ? 'is-active' : ''}}" data-mode="shared" bindtap="selectWorkspaceMode">
+      <text class="workspace-title">共享账单</text><text class="workspace-help">邀请朋友共同记账</text>
+    </button>
   </view>
 
-  <view class="content-stack">
+  <view class="content-stack" wx:if="{{workspaceMode === 'local'}}">
     <view class="panel people-panel">
       <view class="section-heading">
         <view class="step-number">01</view>
@@ -31,7 +32,7 @@
       </view>
       <view class="people-list" wx:if="{{participantsView.length}}">
         <view class="person-chip" wx:for="{{participantsView}}" wx:key="id">
-          <view class="avatar avatar-small {{item.avatarClass}}">{{item.initials}}</view>
+          <button class="avatar-button" data-id="{{item.id}}" bindtap="openLocalAvatarPicker" aria-label="更换 {{item.name}} 的 Emoji"><view class="avatar avatar-small {{item.avatarClass}}">{{item.avatarEmoji}}</view></button>
           <text class="person-name">{{item.name}}</text>
           <button class="chip-remove" data-id="{{item.id}}" bindtap="removePerson">×</button>
         </view>
@@ -69,7 +70,7 @@
         </view>
         <view class="split-people" wx:if="{{expenseForm.splitMode === 'custom'}}">
           <button class="split-chip {{item.selected ? 'is-selected' : ''}}" wx:for="{{participantsView}}" wx:key="id" data-id="{{item.id}}" bindtap="toggleSplitPerson">
-            <view class="avatar avatar-tiny {{item.avatarClass}}">{{item.initials}}</view><text>{{item.name}}</text><text class="check">{{item.selected ? '✓' : '+'}}</text>
+            <view class="avatar avatar-tiny {{item.avatarClass}}">{{item.avatarEmoji}}</view><text>{{item.name}}</text><text class="check">{{item.selected ? '✓' : '+'}}</text>
           </button>
         </view>
         <text class="form-error" wx:if="{{formError}}">{{formError}}</text>
@@ -120,9 +121,9 @@
         <view class="transfer-list">
           <view class="transfer-row" wx:for="{{transfersView}}" wx:key="key">
             <view class="transfer-people">
-              <view class="person-side"><view class="avatar {{item.fromClass}}">{{item.fromInitials}}</view><text>{{item.fromName}}</text></view>
+              <view class="person-side"><view class="avatar {{item.fromClass}}">{{item.fromAvatarEmoji}}</view><text>{{item.fromName}}</text></view>
               <view class="direction-line"><text class="direction-amount">{{item.amountText}}</text><text class="direction-arrow">→</text></view>
-              <view class="person-side person-side-right"><view class="avatar {{item.toClass}}">{{item.toInitials}}</view><text>{{item.toName}}</text></view>
+              <view class="person-side person-side-right"><view class="avatar {{item.toClass}}">{{item.toAvatarEmoji}}</view><text>{{item.toName}}</text></view>
             </view>
           </view>
         </view>
@@ -134,6 +135,39 @@
       </block>
 
     </view>
+  </view>
+
+  <view class="shared-create panel" wx:else>
+    <view class="shared-create-heading">
+      <view><text class="section-title">新建共享账单</text><text class="section-help">创建空账单后发到微信群，加入的成员可以一起记支出。</text></view>
+      <text class="cloud-state {{sharedRoomsEnabled ? 'is-ready' : ''}}">{{sharedRoomsEnabled ? '云端可用' : '暂不可用'}}</text>
+    </view>
+    <view class="shared-unavailable" wx:if="{{!sharedRoomsEnabled}}">
+      <text>共享功能尚未连接云环境。</text><text>本地快速分账仍可正常使用。</text>
+    </view>
+    <block wx:else>
+      <label class="field-label shared-label">账单名称</label>
+      <input class="field-input" value="{{shareRoomTitleInput}}" maxlength="60" placeholder="例如：周末旅行" bindinput="onShareRoomTitleInput" />
+      <view class="shared-field-row">
+        <view class="shared-field-group">
+          <label class="field-label shared-label">币种</label>
+          <picker range="{{roomCurrencyValues}}" value="{{shareCurrencyIndex}}" bindchange="onShareCurrencyChange">
+            <view class="picker-field">{{roomCurrencyValues[shareCurrencyIndex]}} <text>⌄</text></view>
+          </picker>
+        </view>
+        <view class="shared-field-group shared-nickname">
+          <label class="field-label shared-label">你在账单里的昵称</label>
+          <input class="field-input" type="nickname" value="{{shareNicknameInput}}" maxlength="28" placeholder="你的称呼" bindinput="onShareNicknameInput" />
+        </view>
+      </view>
+      <button class="shared-avatar-row" bindtap="openSharedAvatarPicker">
+        <view class="avatar avatar-profile avatar-accent">{{shareAvatarEmoji}}</view>
+        <view><text>你的 Emoji 标记</text><text>自动分配，也可以自己选择</text></view>
+        <text>更换</text>
+      </button>
+      <view class="cloud-notice"><view></view><text>昵称和共享账单会保存到云端，仅账单成员可见；本地账单不会上传。</text></view>
+      <button class="shared-create-button" loading="{{creatingSharedRoom}}" disabled="{{creatingSharedRoom}}" bindtap="confirmCreateSharedRoom"><text>创建共享账单</text><text>→</text></button>
+    </block>
   </view>
 
   <view class="save-dialog-backdrop" wx:if="{{showSaveDialog}}" bindtap="cancelSaveDialog">
@@ -148,22 +182,17 @@
     </view>
   </view>
 
-  <view class="save-dialog-backdrop" wx:if="{{showShareRoomDialog}}" bindtap="closeShareRoomDialog">
-    <view class="save-dialog share-room-dialog" catchtap="noop">
-      <text class="save-dialog-title">新建共享账单</text>
-      <text class="save-dialog-help">先创建空房间，再把邀请发到微信群。只有加入的成员能看到内容。</text>
-      <label class="dialog-label">账单名称</label>
-      <input class="save-title-input dialog-input" value="{{shareRoomTitleInput}}" maxlength="60" focus="{{showShareRoomDialog}}" bindinput="onShareRoomTitleInput" />
-      <label class="dialog-label">币种</label>
-      <picker range="{{roomCurrencyValues}}" value="{{shareCurrencyIndex}}" bindchange="onShareCurrencyChange">
-        <view class="save-title-input dialog-input dialog-picker">{{roomCurrencyValues[shareCurrencyIndex]}} <text>⌄</text></view>
-      </picker>
-      <label class="dialog-label">你的昵称</label>
-      <input class="save-title-input dialog-input" type="nickname" value="{{shareNicknameInput}}" maxlength="28" placeholder="在账单中显示的名字" bindinput="onShareNicknameInput" />
-      <view class="cloud-notice"><view></view><text>昵称和共享账单会保存到云端，仅账单成员可见；本地账单不会上传。</text></view>
-      <view class="save-dialog-actions">
-        <button class="save-cancel" disabled="{{creatingSharedRoom}}" bindtap="closeShareRoomDialog">{{t.cancel}}</button>
-        <button class="save-confirm" loading="{{creatingSharedRoom}}" disabled="{{creatingSharedRoom}}" bindtap="confirmCreateSharedRoom">创建账单</button>
+  <view class="avatar-sheet-backdrop" wx:if="{{showAvatarPicker}}" bindtap="closeAvatarPicker">
+    <view class="avatar-sheet" catchtap="noop">
+      <view class="avatar-sheet-heading"><view><text>选择 Emoji</text><text>{{avatarPickerTargetName}}</text></view><button bindtap="closeAvatarPicker">完成</button></view>
+      <scroll-view class="avatar-grid-scroll" scroll-y>
+        <view class="avatar-grid">
+          <button class="avatar-option {{item === avatarPickerSelected ? 'is-selected' : ''}}" wx:for="{{avatarOptions}}" wx:key="*this" data-emoji="{{item}}" bindtap="chooseAvatarEmoji" aria-label="选择 {{item}}"><text>{{item}}</text></button>
+        </view>
+      </scroll-view>
+      <view class="avatar-sheet-actions">
+        <button bindtap="randomizeAvatarEmoji">随机一个</button>
+        <button bindtap="restoreAutomaticAvatar">恢复自动分配</button>
       </view>
     </view>
   </view>

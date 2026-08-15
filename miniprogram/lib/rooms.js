@@ -1,4 +1,5 @@
 import { CLOUD_ENV_ID, SHARED_ROOMS_ENABLED } from '../config/cloud'
+import { ensureParticipantAvatars, isAvatarEmoji } from './avatar'
 import { CURRENCIES } from './storage'
 
 const ROOM_CACHE_PREFIX = 'settle-shared-room-cache-v2:'
@@ -114,7 +115,7 @@ export function debtStateToRoomState(state) {
     }
   })
   return {
-    participants: state.participants.map(({ id, name }) => ({ id, name })),
+    participants: state.participants.map(({ id, name, avatarEmoji }) => ({ id, name, avatarEmoji })),
     expenses,
     currency: state.currency,
     roundToWhole: state.roundToWhole === true,
@@ -157,6 +158,7 @@ function validParticipant(value) {
     && Boolean(cleanString(value.name, 28))
     && Boolean(cleanString(value.memberId, 80))
     && typeof value.memberActive === 'boolean'
+    && (value.avatarEmoji === undefined || isAvatarEmoji(value.avatarEmoji))
 }
 
 function validExpense(value, participantIds) {
@@ -180,11 +182,12 @@ export function parseRoomSnapshot(value) {
   if (!roomId || !title || !CURRENCIES.includes(currency) || !Number.isSafeInteger(value.room.revision) || value.room.revision < 1) return null
   if (!['active', 'archived'].includes(value.room.status)) return null
   if (!Array.isArray(value.participants) || !Array.isArray(value.expenses) || !Array.isArray(value.members)) return null
-  const participants = value.participants.filter(validParticipant).map((participant) => ({
+  let participants = value.participants.filter(validParticipant).map((participant) => ({
     participantId: participant.participantId,
     name: participant.name.trim(),
     memberId: participant.memberId,
     memberActive: participant.memberActive,
+    ...(isAvatarEmoji(participant.avatarEmoji) ? { avatarEmoji: participant.avatarEmoji } : {}),
   }))
   if (participants.length !== value.participants.length) return null
   const participantIds = new Set(participants.map(({ participantId }) => participantId))
@@ -199,13 +202,16 @@ export function parseRoomSnapshot(value) {
     updatedAt: cleanString(expense.updatedAt, 40),
   }))
   if (expenses.length !== value.expenses.length) return null
-  const members = value.members.map((member) => isRecord(member) && ['owner', 'editor'].includes(member.role) ? ({
+  let members = value.members.map((member) => isRecord(member)
+    && ['owner', 'editor'].includes(member.role)
+    && (member.avatarEmoji === undefined || isAvatarEmoji(member.avatarEmoji)) ? ({
     memberId: cleanString(member.memberId, 80),
     displayName: cleanString(member.displayName, 28),
     role: member.role,
     participantId: cleanString(member.participantId, 80),
     joinedAt: cleanString(member.joinedAt, 40),
     isSelf: member.isSelf === true,
+    ...(isAvatarEmoji(member.avatarEmoji) ? { avatarEmoji: member.avatarEmoji } : {}),
   }) : null)
   if (members.some((member) => !member)) return null
   if (members.some((member) => !member.memberId || !member.displayName)) return null
@@ -215,11 +221,25 @@ export function parseRoomSnapshot(value) {
   if (members.some((member) => participants.find(({ participantId }) => participantId === member.participantId)?.memberId !== member.memberId)) return null
   if (participants.some((participant) => participant.memberActive && !memberIds.has(participant.memberId))) return null
   if (participants.some((participant) => participant.memberActive && members.find(({ memberId }) => memberId === participant.memberId)?.participantId !== participant.participantId)) return null
+  const avatarCandidates = participants.map((participant) => {
+    const member = members.find(({ participantId }) => participantId === participant.participantId)
+    if (isAvatarEmoji(participant.avatarEmoji) && isAvatarEmoji(member?.avatarEmoji) && participant.avatarEmoji !== member.avatarEmoji) return null
+    return {
+      ...participant,
+      avatarEmoji: participant.avatarEmoji || member?.avatarEmoji,
+    }
+  })
+  if (avatarCandidates.some((participant) => !participant)) return null
+  participants = ensureParticipantAvatars(avatarCandidates, `room:${roomId}`)
+  const avatarByParticipantId = new Map(participants.map(({ participantId, avatarEmoji }) => [participantId, avatarEmoji]))
+  members = members.map((member) => ({ ...member, avatarEmoji: avatarByParticipantId.get(member.participantId) }))
   const selfMemberId = cleanString(value.self.memberId, 80)
   const selfMember = members.find(({ memberId }) => memberId === selfMemberId)
   const selfDisplayName = cleanString(value.self.displayName, 28)
   const selfRole = value.self.role
   if (!selfMember || !selfDisplayName || selfMember.displayName !== selfDisplayName || selfMember.role !== selfRole) return null
+  if (value.self.avatarEmoji !== undefined && !isAvatarEmoji(value.self.avatarEmoji)) return null
+  if (isAvatarEmoji(value.self.avatarEmoji) && value.self.avatarEmoji !== selfMember.avatarEmoji) return null
   if (members.filter(({ isSelf }) => isSelf).length !== 1 || !selfMember.isSelf) return null
   if ((value.self.canManage === true) !== (selfRole === 'owner')) return null
 
@@ -249,6 +269,7 @@ export function parseRoomSnapshot(value) {
       role: selfRole,
       participantId: cleanString(value.self.participantId, 80),
       canManage: value.self.canManage === true,
+      avatarEmoji: selfMember.avatarEmoji,
     },
     members,
     participants,
@@ -259,7 +280,7 @@ export function parseRoomSnapshot(value) {
 
 export function snapshotToDebtState(snapshot) {
   return {
-    participants: snapshot.participants.map(({ participantId, name }) => ({ id: participantId, name })),
+    participants: snapshot.participants.map(({ participantId, name, avatarEmoji }) => ({ id: participantId, name, avatarEmoji })),
     expenses: snapshot.expenses.map((expense) => ({
       id: expense.expenseId,
       description: expense.description,

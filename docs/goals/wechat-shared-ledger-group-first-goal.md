@@ -10,11 +10,11 @@
 
 - Verified (2026-08-15): 仓库为 `/Users/xingfanxia/projects/simplify-debts-js`，起草基线为 `main@baf49cd`。
 - Verified: 详细产品、数据、权限和工作包方案位于 `docs/wechat-shared-room-v2-plan.md`，本 Goal 以该文件为实现规格。
-- Verified: 当前首页仍使用独立共享 banner + 创建弹层，未形成明确双模式 — `miniprogram/pages/index/index.wxml`、`index.js`、`index.wxss`。
-- Verified: 当前本地、共享、历史和结算图仍使用昵称首字母；服务端 profile 只允许昵称 — `miniprogram/pages/index/`、`pages/room/`、`pages/history/`、`cloudfunctions/ledger/service.js`。
+- Verified at goal start: 首页使用独立共享 banner + 创建弹层，未形成明确双模式；本地、共享、历史和结算图使用昵称首字母，服务端 profile 只允许昵称。
 - Verified: 空房创建、邀请加入、服务端微信身份和两账号自动化共同编辑已在现有代码中实现并测试。
 - Verified: 生产环境为 `cloud1-d3gbdocpk8fcb2e97`；`ledger`/`ledger_cleanup` 已部署，代码版本 `2.0.3` 已上传，但新的生产变更不属于本 Goal 的默认授权。
-- Verified: 工作区中 `miniprogram/lib/avatar.js` 与 `tests/miniprogram-avatar.test.js` 是未提交草稿，尚未满足避重、持久化、用户选择、服务端校验和权限要求；可按规格重写，不得视为已完成。
+- Verified implementation checkpoint (2026-08-15): 首页已改成常驻双模式；本地、共享、历史和结算图已统一使用受限 Emoji；服务端 profile、事务内分配和旧数据兼容已实现，仍需通过本 Goal 的完整门禁并提交。
+- Verified visual checkpoint (2026-08-15): 微信开发者工具 `2.02.2607171`、基础库 `3.17.0` 已检查 320、390、430px；详细记录位于 `docs/wechat-v2-visual-verification.md`。
 - Decision: 不获取或保存真实头像；默认使用 50 个受限动物/食物 Emoji，自动分配并持久化，用户可选修改。
 - Assumption: 共享房间人数上限低于 50，因此自动分配在正常范围内可以做到房间内不重复。若代码事实不符，先调整规则和测试，不扩大资源范围。
 
@@ -74,7 +74,7 @@
   - A/B 独立成员共同编辑后得到相同 revision、快照和结算结果。
 - WeChat Developer Tools inspection:
   - 在 320、390、430px 检查首页两模式、共享内联创建、邀请加入、房间、Emoji 选择、历史和分享图；
-  - 使用长中文昵称、至少 10 人、多个币种与键盘弹出状态检查可读性、点击面积、截断和溢出；
+- 使用长中文昵称、至少 10 人、多个币种与低可视高度/输入聚焦状态检查可读性、点击面积、截断和溢出；真实系统键盘遮挡在上传后的真机验收中复核；
   - 留存截图或明确记录开发者工具版本、视口与观察结果，不以“已看过”代替证据。
 - Independent two-account proof after production authorization:
   - A 创建空共享账单并把卡片发到微信群；B 确认昵称后加入，双方获得不同默认 Emoji；
