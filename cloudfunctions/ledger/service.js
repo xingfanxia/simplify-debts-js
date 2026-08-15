@@ -575,10 +575,14 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       const paidByParticipantId = cleanString(incoming.paidByParticipantId, 80, 'invalid_expense_participant')
       const splitParticipantIds = uniqueStrings(incoming.splitParticipantIds, LIMITS.participants, 'invalid_expense_participant')
       assert(participantIds.has(paidByParticipantId) && splitParticipantIds.every((participantId) => participantIds.has(participantId)), 'invalid_expense_participant')
-      const expenseId = incoming.expenseId ? cleanString(incoming.expenseId, 80, 'invalid_expense') : id('expense')
+      const requestedExpenseId = incoming.expenseId ? cleanString(incoming.expenseId, 80, 'invalid_expense') : ''
+      const expenseId = requestedExpenseId || id('expense')
       const docId = entityDocId(hash, 'expense', room._id, expenseId)
       const existing = await tx.getExpense(docId)
-      if (!existing) {
+      if (requestedExpenseId) {
+        assert(active(existing), 'expense_not_found')
+      } else {
+        assert(!existing, 'expense_collision')
         const expenses = (await tx.listExpenses(room._id)).filter(active)
         assert(expenses.length < LIMITS.expenses, 'expense_limit')
         room.expenseDocIds = [...(room.expenseDocIds || []), docId]
@@ -637,6 +641,7 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       const participantId = cleanString(payload.participantId, 80, 'invalid_participant')
       const participant = participants.find((item) => item.participantId === participantId)
       assert(participant, 'participant_not_found')
+      assert(participants.length > 2, 'participant_minimum')
       assert(!participant.claimedByMemberId, 'participant_claimed')
       const expenses = (await tx.listExpenses(room._id)).filter(active)
       assert(!expenses.some((expense) => expense.paidByParticipantId === participantId || expense.splitParticipantIds.includes(participantId)), 'participant_in_use')
@@ -795,7 +800,18 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       throw new LedgerError('unknown_action')
     } catch (error) {
       if (error instanceof LedgerError) {
-        return { ok: false, error: error.code, ...error.details }
+        const response = { ok: false, error: error.code, ...error.details }
+        if (error.code === 'revision_conflict' && typeof event.roomId === 'string') {
+          try {
+            const latest = await readAuthorizedSnapshot(event.roomId)
+            response.currentRevision = latest.room.revision
+            response.snapshot = latest
+          } catch (_snapshotError) {
+            // Keep the explicit conflict result when a highly active room changes
+            // again before a stable, authorized snapshot can be read.
+          }
+        }
+        return response
       }
       console.error('[ledger] internal error', {
         action: typeof event.action === 'string' ? event.action : 'unknown',

@@ -8,30 +8,30 @@
 .page-intro { padding: 4rpx 4rpx 22rpx; }
 .page-title, .page-subtitle { display: block; }
 .page-title { font-size: 40rpx; font-weight: 750; line-height: 1.2; }
-.page-subtitle { margin-top: 8rpx; color: var(--muted); font-size: 24rpx; line-height: 1.5; }
+.page-subtitle { margin-top: 8rpx; color: var(--muted); font-size: 27rpx; line-height: 1.5; }
 .history-section { margin-top: 12rpx; }
-.section-label { display: flex; padding: 0 4rpx 10rpx; align-items: center; justify-content: space-between; color: var(--muted); font-size: 21rpx; font-weight: 700; }
+.section-label { display: flex; padding: 0 4rpx 12rpx; align-items: center; justify-content: space-between; color: var(--muted); font-size: 25rpx; font-weight: 700; }
 .history-list { display: flex; flex-direction: column; gap: 16rpx; }
 .history-entry { padding: 24rpx; background: var(--surface); border: 2rpx solid var(--line); border-radius: 20rpx; }
 .entry-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
 .entry-heading { flex: 1; min-width: 0; }
-.entry-date { color: var(--muted); font-size: 22rpx; font-weight: 600; }
+.entry-date { color: var(--muted); font-size: 25rpx; font-weight: 600; }
 .entry-title { display: block; margin-top: 8rpx; overflow: hidden; font-size: 30rpx; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .entry-meta { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 18rpx; padding: 16rpx 0; border-top: 2rpx solid var(--line-soft); border-bottom: 2rpx solid var(--line-soft); }
 .entry-meta text { display: block; }
 .entry-meta text:first-child { font-size: 30rpx; font-weight: 750; }
-.entry-meta text:last-child { margin-top: 3rpx; color: var(--muted); font-size: 22rpx; }
+.entry-meta text:last-child { margin-top: 4rpx; color: var(--muted); font-size: 25rpx; }
 .entry-avatars { display: flex; flex-direction: row-reverse; padding-left: 18rpx; }
 .entry-avatars view { display: flex; align-items: center; justify-content: center; width: 46rpx; height: 46rpx; margin-left: -10rpx; color: #183126; font-size: 16rpx; font-weight: 750; background: var(--mint); border: 3rpx solid var(--surface); border-radius: 50%; }
 .entry-avatars view:nth-child(2) { background: var(--blue); }
 .entry-avatars view:nth-child(3) { background: var(--coral); }
 .entry-avatars view:nth-child(4) { background: var(--purple); }
-.delete-button { flex: 0 0 104rpx; width: 104rpx; min-width: 104rpx; height: 54rpx; margin: 0; padding: 0; color: var(--danger); font-size: 21rpx; font-weight: 650; line-height: 54rpx; background: transparent; border: 2rpx solid var(--line); border-radius: 12rpx; }
+.delete-button { flex: 0 0 112rpx; width: 112rpx; min-width: 112rpx; height: 68rpx; margin: 0; padding: 0; color: var(--danger); font-size: 25rpx; font-weight: 650; line-height: 68rpx; background: transparent; border: 2rpx solid var(--line); border-radius: 12rpx; }
 .entry-actions { width: 100%; margin-top: 16rpx; }
-.open-button { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 76rpx; margin: 0; padding: 0 20rpx; color: var(--primary-ink); font-size: 24rpx; font-weight: 700; line-height: 76rpx; background: var(--primary); border-radius: 14rpx; }
+.open-button { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 86rpx; margin: 0; padding: 0 22rpx; color: var(--primary-ink); font-size: 28rpx; font-weight: 700; line-height: 86rpx; background: var(--primary); border-radius: 14rpx; }
 .shared-entry .entry-date { color: var(--primary); }
 .history-empty { display: flex; flex-direction: column; align-items: center; padding: 96rpx 30rpx; text-align: center; }
 .empty-icon { width: 82rpx; height: 82rpx; padding: 22rpx 18rpx; box-sizing: border-box; background: var(--accent); border-radius: 50%; }
 .empty-icon view { height: 4rpx; margin-bottom: 8rpx; background: var(--accent-ink); border-radius: 3rpx; }
 .history-empty > text:nth-child(2) { margin-top: 22rpx; font-size: 29rpx; font-weight: 750; }
-.history-empty > text:last-child { max-width: 520rpx; margin-top: 8rpx; color: var(--muted); font-size: 24rpx; line-height: 1.5; }
+.history-empty > text:last-child { max-width: 520rpx; margin-top: 8rpx; color: var(--muted); font-size: 27rpx; line-height: 1.5; }

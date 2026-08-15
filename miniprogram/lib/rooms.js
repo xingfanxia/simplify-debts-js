@@ -5,6 +5,10 @@ const ROOM_CACHE_PREFIX = 'settle-shared-room-cache-v1:'
 const ACTIVE_ROOM_IDS_KEY = 'settle-shared-room-ids-v1'
 const MAX_CACHED_ROOMS = 12
 const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW'])
+const CURRENCY_SYMBOLS = {
+  USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩',
+  MXN: 'MX$', BRL: 'R$', TWD: 'NT$', HKD: 'HK$', INR: '₹',
+}
 
 export class RoomError extends Error {
   constructor(code, details = {}) {
@@ -41,6 +45,13 @@ export function parseAmountMinor(value, currency) {
   const factor = minorUnitFactor(currency)
   const amountMinor = Number(wholeText) * factor + Number(fractionText.padEnd(decimals, '0') || 0)
   return Number.isSafeInteger(amountMinor) && amountMinor > 0 ? amountMinor : null
+}
+
+export function formatMinorMoney(amountMinor, currency) {
+  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0 || !CURRENCIES.includes(currency)) return ''
+  const digits = isZeroDecimalCurrency(currency) ? 0 : 2
+  const value = (amountMinor / minorUnitFactor(currency)).toFixed(digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `${CURRENCY_SYMBOLS[currency] || `${currency} `}${value}`
 }
 
 export function localAmountCentsToMinor(amountCents, currency) {
@@ -89,6 +100,10 @@ export async function callLedger(action, data = {}) {
   if (!result.ok) {
     const details = {}
     if (Number.isSafeInteger(result.currentRevision)) details.currentRevision = result.currentRevision
+    if (result.error === 'revision_conflict') {
+      const snapshot = parseRoomSnapshot(result.snapshot)
+      if (snapshot) details.snapshot = snapshot
+    }
     throw new RoomError(cleanString(result.error, 60) || 'unknown_error', details)
   }
   return result

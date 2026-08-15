@@ -5,6 +5,7 @@ import {
   RoomError,
   callLedger,
   clearRoomCache,
+  formatMinorMoney,
   getRoomCache,
   isZeroDecimalCurrency,
   makeMutationId,
@@ -16,7 +17,6 @@ import {
   snapshotToDebtState,
 } from '../../lib/rooms'
 
-const SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩', MXN: 'MX$', BRL: 'R$', TWD: 'NT$', HKD: 'HK$', INR: '₹' }
 const AVATAR_CLASSES = ['avatar-coral', 'avatar-mint', 'avatar-blue', 'avatar-purple']
 const POLL_INTERVAL_MS = 2500
 
@@ -27,12 +27,6 @@ function initials(name) {
 function avatarClass(name) {
   const total = [...name].reduce((sum, character) => sum + character.charCodeAt(0), 0)
   return AVATAR_CLASSES[total % AVATAR_CLASSES.length]
-}
-
-function formatMoney(amountMinor, currency) {
-  const digits = isZeroDecimalCurrency(currency) ? 0 : 2
-  const amount = (amountMinor / minorUnitFactor(currency)).toFixed(digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return `${SYMBOLS[currency] || `${currency} `}${amount}`
 }
 
 function formatExpiry(iso) {
@@ -70,6 +64,8 @@ function errorText(error) {
     participant_unavailable: '这位参与人已被其他成员认领。',
     participant_in_use: '请先删除与这位参与人有关的支出。',
     participant_claimed: '已被成员认领的参与人不能删除。',
+    participant_minimum: '共享账单至少需要两位参与人。',
+    expense_not_found: '这笔支出已被删除，账单已为你刷新。',
     duplicate_participant: '账单中已有同名参与人。',
     invalid_amount: '请输入大于零的有效金额。',
     owner_required: '只有房主可以进行这项操作。',
@@ -105,6 +101,7 @@ Page({
     expensesView: [],
     transfersView: [],
     totalSpendText: '¥0.00',
+    amountPlaceholder: '0.00',
     expenseForm: emptyExpenseForm(),
     editingExpenseId: '',
     payerIndex: 0,
@@ -308,6 +305,7 @@ Page({
       roomId: snapshot.room.roomId,
       roomTitle: snapshot.room.title,
       currency: snapshot.room.currency,
+      amountPlaceholder: isZeroDecimalCurrency(snapshot.room.currency) ? '0' : '0.00',
       currencyValues,
       currencyIndex: Math.max(0, currencyValues.indexOf(snapshot.room.currency)),
       revisionText: `版本 ${snapshot.room.revision}`,
@@ -337,7 +335,7 @@ Page({
       avatarClass: avatarClass(participant.name),
       selected: selected.has(participant.participantId),
       isClaimed: Boolean(participant.claimedByMemberId),
-      canRemove: !participant.claimedByMemberId,
+      canRemove: !participant.claimedByMemberId && snapshot.participants.length > 2,
     }))
     const expensesView = snapshot.expenses.map((expense) => {
       const payer = peopleById.get(expense.paidByParticipantId)
@@ -345,7 +343,7 @@ Page({
       return {
         ...expense,
         payerName: payer?.name || '某人',
-        amountText: formatMoney(expense.amountMinor, snapshot.room.currency),
+        amountText: formatMinorMoney(expense.amountMinor, snapshot.room.currency),
         splitText: expense.splitParticipantIds.length === snapshot.participants.length ? '全员分摊' : `${splitNames.join('、')} 分摊`,
         isEditing: expense.expenseId === this.data.editingExpenseId,
       }
@@ -358,7 +356,7 @@ Page({
         key: `${transfer.from}-${transfer.to}-${index}`,
         fromName: from?.name || '某人',
         toName: to?.name || '某人',
-        amountText: formatMoney(transfer.amountCents, state.currency),
+        amountText: formatMinorMoney(transfer.amountCents, state.currency),
       }
     })
     const membersView = snapshot.members.map((member) => ({
@@ -381,7 +379,7 @@ Page({
       transfersView,
       membersView,
       inviteListView,
-      totalSpendText: formatMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0), state.currency),
+      totalSpendText: formatMinorMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0), state.currency),
       payerIndex: Math.max(0, snapshot.participants.findIndex(({ participantId }) => participantId === this.data.expenseForm.paidBy)),
     })
   },
@@ -546,7 +544,7 @@ Page({
       return true
     } catch (error) {
       if (!['network_error', 'empty_response'].includes(error.code)) this.clearPendingMutation(fingerprint)
-      if (error.code === 'revision_conflict') await this.loadRoom({ silent: true })
+      if (error.code === 'revision_conflict' && !this.applyConflictSnapshot(error)) await this.loadRoom({ silent: true })
       wx.showToast({ title: errorText(error), icon: 'none', duration: 2600 })
       return false
     } finally {
@@ -579,7 +577,7 @@ Page({
     } catch (error) {
       if (!['network_error', 'empty_response'].includes(error.code)) this.clearPendingMutation(fingerprint)
       this.setData({ invitePreparing: false })
-      if (error.code === 'revision_conflict') await this.loadRoom({ silent: true })
+      if (error.code === 'revision_conflict' && !this.applyConflictSnapshot(error)) await this.loadRoom({ silent: true })
       wx.showToast({ title: errorText(error), icon: 'none' })
     }
   },
@@ -654,7 +652,7 @@ Page({
       return true
     } catch (error) {
       if (!['network_error', 'empty_response'].includes(error.code)) this.clearPendingMutation(fingerprint)
-      if (error.code === 'revision_conflict') await this.loadRoom({ silent: true })
+      if (error.code === 'revision_conflict' && !this.applyConflictSnapshot(error)) await this.loadRoom({ silent: true })
       wx.showToast({ title: errorText(error), icon: 'none', duration: 2600 })
       return false
     } finally {
@@ -670,5 +668,16 @@ Page({
 
   clearPendingMutation(fingerprint) {
     if (this.pendingMutations) this.pendingMutations.delete(fingerprint)
+  },
+
+  applyConflictSnapshot(error) {
+    const snapshot = error && error.details ? error.details.snapshot : null
+    if (!snapshot) return false
+    try {
+      this.applySnapshot(saveRoomCache(snapshot))
+      return true
+    } catch (_error) {
+      return false
+    }
   },
 })

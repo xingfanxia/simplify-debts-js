@@ -84,7 +84,7 @@
           <label class="field-label">支出内容</label>
           <input class="field-input" value="{{expenseForm.description}}" maxlength="60" placeholder="晚餐、车票、民宿…" bindinput="onDescriptionInput" />
           <view class="two-fields">
-            <view><label class="field-label">金额（{{currency}}）</label><input class="field-input" type="digit" value="{{expenseForm.amount}}" placeholder="0.00" bindinput="onAmountInput" /></view>
+            <view><label class="field-label">金额（{{currency}}）</label><input class="field-input" type="digit" value="{{expenseForm.amount}}" placeholder="{{amountPlaceholder}}" bindinput="onAmountInput" /></view>
             <view><label class="field-label">付款人</label><picker range="{{participantNames}}" value="{{payerIndex}}" bindchange="onPayerChange"><view class="picker-field">{{participantNames[payerIndex] || '请选择'}} <text>⌄</text></view></picker></view>
           </view>
           <label class="field-label">由谁分摊</label>
@@ -135,7 +135,7 @@
           <button class="danger-text" bindtap="deleteRoom">删除共享账单</button>
         </block>
       </view>
-      <text class="privacy-footer">共享账单保存在云端，仅房间成员可以访问。</text>
+      <text class="privacy-footer">云端仅当前成员可访问；本机保留最近同步的只读副本。</text>
     </view>
   </block>
   <view class="safe-bottom"></view>

@@ -44,7 +44,7 @@
         <view class="field-row">
           <view class="field-group amount-field">
             <label class="field-label">{{t.amount}}</label>
-            <view class="money-input"><text>{{currency}}</text><input type="digit" value="{{expenseForm.amount}}" placeholder="0.00" bindinput="onAmountInput" /></view>
+            <view class="money-input"><text>{{currency}}</text><input type="digit" value="{{expenseForm.amount}}" placeholder="{{amountPlaceholder}}" bindinput="onAmountInput" /></view>
           </view>
           <view class="field-group payer-field">
             <label class="field-label">{{t.paidBy}}</label>

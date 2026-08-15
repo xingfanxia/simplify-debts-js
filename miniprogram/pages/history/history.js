@@ -1,6 +1,6 @@
 import { getMessages, translate } from '../../lib/i18n'
 import { getCurrentState, getHistory, getPreferences, resolveTheme, saveCurrentState, saveHistory } from '../../lib/storage'
-import { getCachedRooms } from '../../lib/rooms'
+import { formatMinorMoney, getCachedRooms } from '../../lib/rooms'
 
 const SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩', MXN: 'MX$', BRL: 'R$', TWD: 'NT$', HKD: 'HK$', INR: '₹' }
 
@@ -51,7 +51,7 @@ Page({
       title: snapshot.room.title,
       currency: snapshot.room.currency,
       statusText: snapshot.room.status === 'archived' ? '已归档' : '云端同步',
-      totalText: formatMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountCents, 0), snapshot.room.currency),
+      totalText: formatMinorMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0), snapshot.room.currency),
       expenseText: `${snapshot.expenses.length} 笔支出`,
       membersText: `${snapshot.members.length} 位成员`,
       avatars: snapshot.participants.slice(0, 4).map((person) => ({ id: person.participantId, initials: initials(person.name) })),
