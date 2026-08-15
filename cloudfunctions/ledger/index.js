@@ -11,10 +11,6 @@ exports.main = async (event) => {
   const context = cloud.getWXContext()
   if (!context || !context.OPENID) return { ok: false, error: 'no_openid' }
   if (context.APPID && context.APPID !== EXPECTED_APP_ID) return { ok: false, error: 'wrong_app' }
-  const service = createLedgerService({
-    repository,
-    openid: context.OPENID,
-    appid: context.APPID || '',
-  })
+  const service = createLedgerService({ repository, openid: context.OPENID, appid: context.APPID || '' })
   return service.execute(event)
 }

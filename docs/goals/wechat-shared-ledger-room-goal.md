@@ -1,4 +1,7 @@
-# Goal: 为微信小程序实现安全可用的多人共享分账房间
+# Goal: 为微信小程序实现安全可用的多人共享分账房间（已由 V2 取代）
+
+> 本 Goal 对应旧的“本地账单转换 + 参与人认领”模型。不要继续执行。
+> 新 Goal 见 [wechat-shared-ledger-group-first-goal.md](./wechat-shared-ledger-group-first-goal.md)。
 
 ## Intent
 

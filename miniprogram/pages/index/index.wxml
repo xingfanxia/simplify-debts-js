@@ -11,6 +11,14 @@
     </view>
   </view>
 
+  <view class="shared-launcher" wx:if="{{sharedRoomsEnabled}}">
+    <view class="shared-launcher-copy">
+      <text class="shared-launcher-title">和朋友一起记账</text>
+      <text class="shared-launcher-help">新建空白账单，发到微信群后一起添加支出。</text>
+    </view>
+    <button bindtap="openCreateSharedRoom"><text>新建共享账单</text><text>→</text></button>
+  </view>
+
   <view class="content-stack">
     <view class="panel people-panel">
       <view class="section-heading">
@@ -125,11 +133,6 @@
         </view>
       </block>
 
-      <view class="shared-room-cta" wx:if="{{sharedRoomsEnabled && hasExpenses}}">
-        <view><text>{{t.createSharedBill}}</text><text>{{t.createSharedBillHelp}}</text></view>
-        <button bindtap="openCreateSharedRoom">{{t.createSharedBill}} <text>↗</text></button>
-      </view>
-
     </view>
   </view>
 
@@ -147,20 +150,20 @@
 
   <view class="save-dialog-backdrop" wx:if="{{showShareRoomDialog}}" bindtap="closeShareRoomDialog">
     <view class="save-dialog share-room-dialog" catchtap="noop">
-      <text class="save-dialog-title">{{t.createSharedBill}}</text>
-      <text class="save-dialog-help">{{t.sharedUploadNotice}}</text>
-      <label class="dialog-label">{{t.sharedBillName}}</label>
+      <text class="save-dialog-title">新建共享账单</text>
+      <text class="save-dialog-help">先创建空房间，再把邀请发到微信群。只有加入的成员能看到内容。</text>
+      <label class="dialog-label">账单名称</label>
       <input class="save-title-input dialog-input" value="{{shareRoomTitleInput}}" maxlength="60" focus="{{showShareRoomDialog}}" bindinput="onShareRoomTitleInput" />
-      <label class="dialog-label">{{t.yourDisplayName}}</label>
-      <input class="save-title-input dialog-input" value="{{shareDisplayNameInput}}" maxlength="28" bindinput="onShareDisplayNameInput" />
-      <label class="dialog-label">{{t.claimYourself}}</label>
-      <picker range="{{shareOwnerNames}}" value="{{shareOwnerIndex}}" bindchange="onShareOwnerChange">
-        <view class="save-title-input dialog-input dialog-picker">{{shareOwnerNames[shareOwnerIndex]}} <text>⌄</text></view>
+      <label class="dialog-label">币种</label>
+      <picker range="{{roomCurrencyValues}}" value="{{shareCurrencyIndex}}" bindchange="onShareCurrencyChange">
+        <view class="save-title-input dialog-input dialog-picker">{{roomCurrencyValues[shareCurrencyIndex]}} <text>⌄</text></view>
       </picker>
-      <view class="cloud-notice"><view></view><text>{{t.sharedPrivacyNotice}}</text></view>
+      <label class="dialog-label">你的昵称</label>
+      <input class="save-title-input dialog-input" type="nickname" value="{{shareNicknameInput}}" maxlength="28" placeholder="在账单中显示的名字" bindinput="onShareNicknameInput" />
+      <view class="cloud-notice"><view></view><text>昵称和共享账单会保存到云端，仅账单成员可见；本地账单不会上传。</text></view>
       <view class="save-dialog-actions">
         <button class="save-cancel" disabled="{{creatingSharedRoom}}" bindtap="closeShareRoomDialog">{{t.cancel}}</button>
-        <button class="save-confirm" loading="{{creatingSharedRoom}}" disabled="{{creatingSharedRoom}}" bindtap="confirmCreateSharedRoom">{{t.confirmCreateShared}}</button>
+        <button class="save-confirm" loading="{{creatingSharedRoom}}" disabled="{{creatingSharedRoom}}" bindtap="confirmCreateSharedRoom">创建账单</button>
       </view>
     </view>
   </view>

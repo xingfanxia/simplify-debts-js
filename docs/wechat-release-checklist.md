@@ -26,7 +26,9 @@ Use the following facts when completing the platform privacy form:
 - Ordinary local ledgers, preferences, and saved history remain in WeChat local
   storage on the user's device.
 - Participant names and expenses are uploaded only after the user explicitly
-  creates a shared ledger. They are synchronized only to joined room members.
+  creates or joins a shared ledger. They are synchronized only to joined room members.
+- The shared flow asks only for a room nickname. It does not request, upload, or
+  store the user's WeChat avatar; initials are generated on-device for display.
 - Shared-room authorization uses the caller's WeChat OpenID transiently inside
   the Cloud Function. Application collections retain only a room-scoped one-way
   authorization document ID; raw OpenID is neither persisted there nor returned
@@ -43,7 +45,7 @@ Use the following facts when completing the platform privacy form:
 
 Suggested privacy summary:
 
-> 本小程序无需注册账号。普通账单和历史记录默认仅保存在用户设备。只有用户主动创建共享账单时，参与人姓名、成员显示名称、币种和支出才会上传至微信云开发，用于向已加入的房间成员同步账单。房主可删除共享账单；删除后立即停止访问，并在 30 天恢复窗后永久清理。
+> 本小程序无需注册账号。普通账单和历史记录默认仅保存在用户设备。只有用户主动创建或加入共享账单时，房间昵称、成员关系、币种和支出才会上传至微信云开发，用于向已加入的房间成员同步账单。本小程序不采集微信头像。房主可删除共享账单；删除后立即停止访问，并在 30 天恢复窗后永久清理。
 
 ## First upload
 
@@ -56,8 +58,8 @@ Suggested privacy summary:
   4. Tap `分享结算图` and confirm the portrait card is readable.
   5. Tap `保存并新建`, name the settlement, then reopen it from `历史`.
   6. Change the currency and appearance from the compact controls at the top of the main screen.
-  7. With CloudBase enabled, tap `创建共享账单`; confirm the upload notice, create the room, and generate an invitation.
-  8. Open the invitation with a second WeChat account; before joining it must show only the room name, currency, participant count, and claim choices. After joining it may show the full ledger.
+  7. With CloudBase enabled, tap `新建共享账单` from an empty local state; enter a room name, currency, and nickname, create the empty room, and generate an invitation.
+  8. Open the invitation with a second WeChat account; before joining it must show only the room name, currency, and member count. Confirm a nickname and join without identity claiming or avatar authorization; only then may it show the full ledger.
 
 ## Release commands
 

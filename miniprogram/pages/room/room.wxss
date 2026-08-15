@@ -20,13 +20,6 @@ button { margin: 0; }
 .card-help { margin-top: 7rpx; color: var(--muted); font-size: 26rpx; line-height: 1.5; }
 .field-label { display: block; margin: 26rpx 2rpx 10rpx; color: var(--muted); font-size: 26rpx; font-weight: 700; }
 .field-input, .picker-field { width: 100%; height: 92rpx; padding: 0 20rpx; box-sizing: border-box; color: var(--ink); font-size: 30rpx; background: var(--surface-2); border: 2rpx solid var(--line); border-radius: 16rpx; }
-.identity-label { margin-top: 26rpx; }
-.identity-list { display: grid; grid-template-columns: 1fr; gap: 12rpx; }
-.identity-option { display: grid; grid-template-columns: 22rpx minmax(0, 1fr) 28rpx; width: 100%; height: 88rpx; padding: 0 20rpx; align-items: center; gap: 12rpx; color: var(--ink); font-size: 29rpx; line-height: 88rpx; text-align: left; background: var(--surface-2); border: 2rpx solid var(--line); border-radius: 15rpx; }
-.identity-option.is-selected { background: var(--accent); border-color: var(--primary); }
-.identity-dot { width: 18rpx; height: 18rpx; background: var(--line); border-radius: 50%; }
-.identity-option.is-selected .identity-dot { background: var(--primary); }
-.new-person-field { margin-top: 12rpx; }
 .primary-button { display: flex; width: 100%; height: 92rpx; margin-top: 28rpx; padding: 0 24rpx; align-items: center; justify-content: space-between; color: var(--primary-ink); font-size: 30rpx; font-weight: 750; line-height: 92rpx; background: var(--primary); border-radius: 16rpx; }
 .privacy-note, .privacy-footer { display: block; color: var(--muted); font-size: 25rpx; line-height: 1.55; text-align: center; }
 .privacy-note { padding: 24rpx 12rpx; }
@@ -58,19 +51,8 @@ button { margin: 0; }
 .card-heading > view { flex: 1; min-width: 0; }
 .card-heading > text { color: var(--muted); font-size: 26rpx; font-weight: 700; }
 .card-heading > button { height: 72rpx; padding: 0 18rpx; color: var(--muted); font-size: 26rpx; line-height: 72rpx; background: var(--surface-2); border-radius: 12rpx; }
-.participant-grid { display: grid; grid-template-columns: 1fr; gap: 12rpx; margin-top: 22rpx; }
-.participant-chip { display: flex; min-width: 0; min-height: 104rpx; padding: 10rpx 14rpx; align-items: center; gap: 12rpx; background: var(--surface-2); border-radius: 15rpx; }
 .avatar { display: flex; flex: 0 0 56rpx; width: 56rpx; height: 56rpx; align-items: center; justify-content: center; color: #172019; font-size: 20rpx; font-weight: 750; border-radius: 50%; }
 .avatar-coral { background: var(--coral); }.avatar-mint { background: var(--mint); }.avatar-blue { background: var(--blue); }.avatar-purple { background: var(--purple); }
-.participant-copy { flex: 1; min-width: 0; }
-.participant-copy text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.participant-copy text:first-child { font-size: 29rpx; font-weight: 700; }
-.participant-copy text:last-child { margin-top: 4rpx; color: var(--muted); font-size: 24rpx; }
-.participant-actions { display: flex; flex: 0 0 auto; gap: 6rpx; }
-.participant-actions button { height: 72rpx; padding: 0 16rpx; color: var(--muted); font-size: 25rpx; line-height: 72rpx; background: var(--surface); border-radius: 12rpx; }
-.inline-form { display: grid; grid-template-columns: minmax(0, 1fr) 126rpx; gap: 9rpx; margin-top: 16rpx; }
-.inline-form input { height: 88rpx; padding: 0 18rpx; font-size: 29rpx; background: var(--surface-2); border: 2rpx solid var(--line); border-radius: 14rpx; }
-.inline-form button { height: 88rpx; color: var(--primary-ink); font-size: 28rpx; font-weight: 700; line-height: 88rpx; background: var(--primary); border-radius: 14rpx; }
 .readonly-banner { margin-top: 20rpx; padding: 18rpx; color: var(--muted); font-size: 27rpx; line-height: 1.5; background: var(--surface-2); border-radius: 14rpx; }
 .two-fields { display: grid; grid-template-columns: 1fr; gap: 0; }
 .two-fields > view + view { margin-top: 20rpx; }
@@ -122,10 +104,25 @@ button { margin: 0; }
 .room-controls button { width: 100%; height: 88rpx; padding: 0 20rpx; color: var(--muted); font-size: 28rpx; line-height: 88rpx; background: var(--surface); border: 2rpx solid var(--line); border-radius: 14rpx; }
 .room-controls button:only-child { grid-column: 1 / -1; }
 .privacy-footer { padding: 5rpx 16rpx 20rpx; }
+.dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: flex; padding: 32rpx; align-items: center; justify-content: center; box-sizing: border-box; background: rgba(12, 18, 14, .58); }
+.profile-dialog { width: 100%; max-width: 620rpx; padding: 30rpx; box-sizing: border-box; color: var(--ink); background: var(--surface); border: 2rpx solid var(--line); border-radius: 22rpx; box-shadow: 0 24rpx 70rpx rgba(0, 0, 0, .2); }
+.profile-input { margin-top: 24rpx; }
+.dialog-actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10rpx; margin-top: 18rpx; }
+.dialog-actions button { width: 100%; height: 80rpx; padding: 0 16rpx; color: var(--muted); font-size: 27rpx; font-weight: 700; line-height: 80rpx; background: var(--surface-2); border-radius: 14rpx; }
+.dialog-actions .dialog-primary { color: var(--primary-ink); background: var(--primary); }
 
 @media (max-width: 360px) {
   .room-content { padding-right: 18rpx; padding-left: 18rpx; }
   .tool-card { padding: 21rpx; }
-  .participant-actions button { padding: 0 12rpx; }
   .split-grid { grid-template-columns: 1fr; }
+  .join-title, .room-title { font-size: 22px; }
+  .card-title { font-size: 17px; }
+  .card-help, .join-meta, .room-meta { font-size: 14px; }
+  .field-label, .summary-card text:first-child, .expense-main text:last-child, .member-row text:last-child, .rounding-row text:last-child, .privacy-note, .privacy-footer { font-size: 13px; }
+  .field-input, .picker-field { height: 46px; font-size: 16px; }
+  .picker-field { line-height: 46px; }
+  .primary-button, .invite-button { min-height: 46px; font-size: 15px; line-height: 46px; }
+  .segment-control button, .split-option, .member-row button, .expense-actions button, .dialog-actions button { min-height: 44px; font-size: 14px; line-height: 44px; }
+  .summary-card text:last-child, .expense-main text:first-child, .expense-money, .transfer-name, .member-row text:first-child, .rounding-row text:first-child { font-size: 16px; }
+  .transfer-money { font-size: 18px; }
 }

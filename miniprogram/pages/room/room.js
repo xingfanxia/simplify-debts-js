@@ -36,8 +36,8 @@ function formatExpiry(iso) {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-function emptyExpenseForm() {
-  return { description: '', amount: '', paidBy: '', splitMode: 'everyone', selectedIds: [] }
+function emptyExpenseForm(paidBy = '') {
+  return { description: '', amount: '', paidBy, splitMode: 'everyone', selectedIds: [] }
 }
 
 function mutationFingerprint(action, kind, payload) {
@@ -62,10 +62,9 @@ function errorText(error) {
     revision_conflict: '账单刚刚被其他成员更新，已为你刷新。',
     mutation_mismatch: '这次重试与原操作不一致，请刷新后再试。',
     currency_precision_change: '已有共享支出时，不能在整数币种与两位小数币种之间切换。',
-    participant_unavailable: '这位参与人已被其他成员认领。',
-    participant_in_use: '请先删除与这位参与人有关的支出。',
-    participant_claimed: '已被成员认领的参与人不能删除。',
-    participant_minimum: '共享账单至少需要两位参与人。',
+    invalid_display_name: '请输入 1–28 个字符的昵称。',
+    invalid_profile: '请输入你的昵称。',
+    legacy_identity_forbidden: '加入流程已经更新，请重新打开邀请。',
     expense_not_found: '这笔支出已被删除，账单已为你刷新。',
     duplicate_participant: '账单中已有同名参与人。',
     invalid_amount: '请输入大于零的有效金额。',
@@ -83,9 +82,7 @@ Page({
     mode: 'loading',
     errorMessage: '',
     preview: null,
-    joinDisplayName: '',
-    joinChoice: '',
-    newParticipantName: '',
+    joinNickname: '',
     joining: false,
     roomId: '',
     snapshot: null,
@@ -107,8 +104,10 @@ Page({
     editingExpenseId: '',
     payerIndex: 0,
     formError: '',
-    newParticipantInput: '',
     mutating: false,
+    showProfileDialog: false,
+    profileNicknameInput: '',
+    updatingProfile: false,
     invitePreparing: false,
     inviteReady: false,
     inviteSharePath: '',
@@ -152,6 +151,8 @@ Page({
   onUnload() {
     this.stopPolling()
     this.inviteToken = ''
+    this.pendingJoin = null
+    this.pendingProfileUpdate = null
     if (this.pendingMutations) this.pendingMutations.clear()
   },
 
@@ -167,6 +168,8 @@ Page({
     return { title: '多人分账', path: '/pages/index/index' }
   },
 
+  noop() {},
+
   applyTheme() {
     const theme = resolveTheme(getPreferences().theme)
     getApp().globalData.theme = theme
@@ -180,65 +183,52 @@ Page({
     try {
       const result = await callLedger('room_join_preview', { invite: this.inviteToken })
       const preview = result.preview
-      const firstChoice = preview.claimableParticipants[0]?.participantId || '__new__'
       this.setData({
         mode: 'preview',
         preview,
-        joinChoice: firstChoice,
-        joinDisplayName: preview.claimableParticipants[0]?.name || '',
-        newParticipantName: '',
+        joinNickname: '',
       })
       wx.setNavigationBarTitle({ title: '加入共享账单' })
+      if (preview.alreadyJoined) this.joinRoom()
     } catch (error) {
       this.setData({ mode: 'error', errorMessage: errorText(error) })
     }
   },
 
-  onJoinNameInput(event) {
-    this.setData({ joinDisplayName: event.detail.value })
-  },
-
-  onNewParticipantInput(event) {
-    this.setData({ newParticipantName: event.detail.value })
-  },
-
-  selectJoinChoice(event) {
-    const choice = event.currentTarget.dataset.id
-    const participant = this.data.preview?.claimableParticipants.find(({ participantId }) => participantId === choice)
-    this.setData({
-      joinChoice: choice,
-      joinDisplayName: participant ? participant.name : this.data.joinDisplayName,
-      newParticipantName: choice === '__new__' ? this.data.newParticipantName : '',
-    })
+  onJoinNicknameInput(event) {
+    this.setData({ joinNickname: event.detail.value })
   },
 
   async joinRoom() {
     if (this.data.joining) return
-    const displayName = this.data.joinDisplayName.trim()
-    if (!displayName) {
-      wx.showToast({ title: '请输入你的显示名称', icon: 'none' })
+    const alreadyJoined = this.data.preview?.alreadyJoined === true
+    const nickname = this.data.joinNickname.trim()
+    if (!alreadyJoined && !nickname) {
+      wx.showToast({ title: '请输入你的昵称', icon: 'none' })
       return
     }
-    const isNew = this.data.joinChoice === '__new__'
-    const newParticipantName = this.data.newParticipantName.trim()
-    if (isNew && !newParticipantName) {
-      wx.showToast({ title: '请输入新参与人姓名', icon: 'none' })
-      return
+    const fingerprint = JSON.stringify([this.inviteToken, nickname, alreadyJoined])
+    if (!this.pendingJoin || this.pendingJoin.fingerprint !== fingerprint) {
+      this.pendingJoin = { fingerprint, mutationId: makeMutationId('room-join') }
     }
     this.setData({ joining: true })
     try {
-      const result = await callLedger('room_join', {
+      const request = {
         invite: this.inviteToken,
-        displayName,
-        claimParticipantId: isNew ? '' : this.data.joinChoice,
-        newParticipantName: isNew ? newParticipantName : '',
-      })
+        mutationId: this.pendingJoin.mutationId,
+      }
+      if (!alreadyJoined) {
+        request.profile = { nickname }
+      }
+      const result = await callLedger('room_join', request)
+      this.pendingJoin = null
       this.inviteToken = ''
       const snapshot = saveRoomCache(result.snapshot)
       this.setData({ roomId: snapshot.room.roomId, joining: false })
       this.applySnapshot(snapshot)
       this.startPolling()
     } catch (error) {
+      if (!['network_error', 'empty_response'].includes(error.code)) this.pendingJoin = null
       this.setData({ joining: false })
       wx.showToast({ title: errorText(error), icon: 'none', duration: 2600 })
       if (['invite_invalid', 'invite_expired', 'invite_exhausted', 'membership_revoked'].includes(error.code)) {
@@ -302,6 +292,9 @@ Page({
     const currentInvite = snapshot.invites.find((invite) => invite.inviteId === this.data.inviteId && invite.active)
     const keepCurrentInvite = offline ? this.data.inviteReady : Boolean(currentInvite)
     const draft = reconcileExpenseDraft(snapshot, this.data.editingExpenseId, this.data.expenseForm)
+    if (!draft.editingExpenseId && !this.data.expenseForm.paidBy && snapshot.self.participantId) {
+      draft.form.paidBy = snapshot.self.participantId
+    }
     this.setData({
       mode: 'room',
       snapshot,
@@ -336,13 +329,11 @@ Page({
     const state = snapshotToDebtState(snapshot)
     const peopleById = new Map(state.participants.map((person) => [person.id, person]))
     const selected = new Set(this.data.expenseForm.selectedIds)
-    const participantsView = snapshot.participants.map((participant) => ({
+    const participantsView = snapshot.participants.filter(({ memberActive }) => memberActive).map((participant) => ({
       ...participant,
       initials: initials(participant.name),
       avatarClass: avatarClass(participant.name),
       selected: selected.has(participant.participantId),
-      isClaimed: Boolean(participant.claimedByMemberId),
-      canRemove: !participant.claimedByMemberId && snapshot.participants.length > 2,
     }))
     const expensesView = snapshot.expenses.map((expense) => {
       const payer = peopleById.get(expense.paidByParticipantId)
@@ -372,6 +363,7 @@ Page({
       avatarClass: avatarClass(member.displayName),
       roleText: member.role === 'owner' ? '房主' : '成员',
       canRemove: this.data.canManage && member.role !== 'owner' && !member.isSelf,
+      canEditProfile: member.isSelf && !this.data.readOnly,
     }))
     const inviteListView = (snapshot.invites || []).map((invite) => ({
       ...invite,
@@ -387,43 +379,7 @@ Page({
       membersView,
       inviteListView,
       totalSpendText: formatMinorMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0), state.currency),
-      payerIndex: Math.max(0, snapshot.participants.findIndex(({ participantId }) => participantId === this.data.expenseForm.paidBy)),
-    })
-  },
-
-  onParticipantInput(event) {
-    this.setData({ newParticipantInput: event.detail.value })
-  },
-
-  async addParticipant() {
-    const name = this.data.newParticipantInput.trim()
-    if (!name) return
-    const ok = await this.mutate('add_participant', { name }, 'participant')
-    if (ok) this.setData({ newParticipantInput: '' })
-  },
-
-  removeParticipant(event) {
-    const participant = this.data.snapshot.participants.find(({ participantId }) => participantId === event.currentTarget.dataset.id)
-    if (!participant) return
-    wx.showModal({
-      title: '删除参与人',
-      content: `确定删除“${participant.name}”？有关联支出或已被成员认领时不能删除。`,
-      confirmColor: '#b5443a',
-      success: ({ confirm }) => confirm && this.mutate('remove_participant', { participantId: participant.participantId }, 'participant'),
-    })
-  },
-
-  renameParticipant(event) {
-    const participant = this.data.snapshot.participants.find(({ participantId }) => participantId === event.currentTarget.dataset.id)
-    if (!participant || this.data.readOnly) return
-    wx.showModal({
-      title: `重命名“${participant.name}”`,
-      editable: true,
-      placeholderText: '输入新姓名',
-      success: ({ confirm, content }) => {
-        const name = typeof content === 'string' ? content.trim() : ''
-        if (confirm && name) this.mutate('rename_participant', { participantId: participant.participantId, name }, 'participant')
-      },
+      payerIndex: Math.max(0, participantsView.findIndex(({ participantId }) => participantId === this.data.expenseForm.paidBy)),
     })
   },
 
@@ -436,14 +392,14 @@ Page({
   },
 
   onPayerChange(event) {
-    const participant = this.data.snapshot.participants[Number(event.detail.value)]
+    const participant = this.data.participantsView[Number(event.detail.value)]
     if (participant) this.setData({ 'expenseForm.paidBy': participant.participantId, payerIndex: Number(event.detail.value), formError: '' })
   },
 
   chooseEveryone() {
     this.setData({
       'expenseForm.splitMode': 'everyone',
-      'expenseForm.selectedIds': this.data.snapshot.participants.map(({ participantId }) => participantId),
+      'expenseForm.selectedIds': this.data.participantsView.map(({ participantId }) => participantId),
       formError: '',
     }, () => this.recompute())
   },
@@ -451,7 +407,7 @@ Page({
   chooseCustom() {
     const selectedIds = this.data.expenseForm.selectedIds.length
       ? this.data.expenseForm.selectedIds
-      : this.data.snapshot.participants.map(({ participantId }) => participantId)
+      : this.data.participantsView.map(({ participantId }) => participantId)
     this.setData({ 'expenseForm.splitMode': 'custom', 'expenseForm.selectedIds': selectedIds, formError: '' }, () => this.recompute())
   },
 
@@ -465,12 +421,12 @@ Page({
   },
 
   async submitExpense() {
-    const participants = this.data.snapshot.participants
+    const participants = this.data.participantsView
     const form = this.data.expenseForm
     const amountMinor = parseAmountMinor(form.amount, this.data.currency)
     const paidByParticipantId = form.paidBy || participants[0]?.participantId || ''
     const splitParticipantIds = form.splitMode === 'everyone' ? participants.map(({ participantId }) => participantId) : form.selectedIds
-    if (participants.length < 2) this.setData({ formError: '请先添加至少两位参与人。' })
+    if (!participants.length) this.setData({ formError: '当前没有可记账的成员。' })
     else if (!amountMinor) this.setData({ formError: isZeroDecimalCurrency(this.data.currency) ? '该币种只支持整数金额。' : '请输入大于零、最多两位小数的金额。' })
     else if (!paidByParticipantId) this.setData({ formError: '请选择付款人。' })
     else if (!splitParticipantIds.length) this.setData({ formError: '请至少选择一位分摊人。' })
@@ -484,14 +440,15 @@ Page({
           splitParticipantIds,
         },
       }, 'expense')
-      if (ok) this.setData({ editingExpenseId: '', expenseForm: emptyExpenseForm(), formError: '' }, () => this.recompute())
+      if (ok) this.setData({ editingExpenseId: '', expenseForm: emptyExpenseForm(this.data.snapshot.self.participantId), formError: '' }, () => this.recompute())
     }
   },
 
   editExpense(event) {
     const expense = this.data.snapshot.expenses.find(({ expenseId }) => expenseId === event.currentTarget.dataset.id)
     if (!expense) return
-    const everyone = expense.splitParticipantIds.length === this.data.snapshot.participants.length
+    const activeIds = new Set(this.data.participantsView.map(({ participantId }) => participantId))
+    const everyone = expense.splitParticipantIds.length === activeIds.size && expense.splitParticipantIds.every((id) => activeIds.has(id))
     this.setData({
       editingExpenseId: expense.expenseId,
       expenseForm: {
@@ -509,7 +466,7 @@ Page({
   },
 
   cancelExpenseEdit() {
-    this.setData({ editingExpenseId: '', expenseForm: emptyExpenseForm(), formError: '' }, () => this.recompute())
+    this.setData({ editingExpenseId: '', expenseForm: emptyExpenseForm(this.data.snapshot.self.participantId), formError: '' }, () => this.recompute())
   },
 
   removeExpense(event) {
@@ -602,6 +559,56 @@ Page({
     this.manage('revoke_invite', { inviteId }, { successText: '邀请已撤销' }).then((ok) => {
       if (ok && inviteId === this.data.inviteId) this.setData({ inviteReady: false, inviteSharePath: '', inviteId: '', inviteExpiryText: '' })
     })
+  },
+
+  openProfileDialog() {
+    if (this.data.readOnly || !this.data.snapshot) return
+    this.pendingProfileUpdate = null
+    this.setData({
+      showProfileDialog: true,
+      profileNicknameInput: this.data.snapshot.self.displayName,
+    })
+  },
+
+  closeProfileDialog() {
+    if (this.data.updatingProfile) return
+    this.pendingProfileUpdate = null
+    this.setData({ showProfileDialog: false, profileNicknameInput: '' })
+  },
+
+  onProfileNicknameInput(event) {
+    this.setData({ profileNicknameInput: event.detail.value })
+  },
+
+  async updateProfile() {
+    if (this.data.updatingProfile || !this.data.snapshot) return
+    const nickname = this.data.profileNicknameInput.trim()
+    if (!nickname) {
+      wx.showToast({ title: '请输入你的昵称', icon: 'none' })
+      return
+    }
+    const fingerprint = JSON.stringify([this.data.roomId, nickname])
+    if (!this.pendingProfileUpdate || this.pendingProfileUpdate.fingerprint !== fingerprint) {
+      this.pendingProfileUpdate = { fingerprint, mutationId: makeMutationId('profile') }
+    }
+    this.setData({ updatingProfile: true })
+    try {
+      await callLedger('room_profile_update', {
+        roomId: this.data.roomId,
+        baseRevision: this.data.snapshot.room.revision,
+        mutationId: this.pendingProfileUpdate.mutationId,
+        profile: { nickname },
+      })
+      this.pendingProfileUpdate = null
+      this.setData({ updatingProfile: false, showProfileDialog: false, profileNicknameInput: '' })
+      await this.loadRoom({ silent: true })
+      wx.showToast({ title: '昵称已更新', icon: 'success' })
+    } catch (error) {
+      if (!['network_error', 'empty_response'].includes(error.code)) this.pendingProfileUpdate = null
+      this.setData({ updatingProfile: false })
+      if (error.code === 'revision_conflict' && !this.applyConflictSnapshot(error)) await this.loadRoom({ silent: true })
+      wx.showToast({ title: errorText(error), icon: 'none', duration: 2600 })
+    }
   },
 
   removeMember(event) {

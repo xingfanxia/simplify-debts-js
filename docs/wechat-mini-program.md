@@ -4,8 +4,8 @@ The `miniprogram/` directory is a native WeChat mini program. It intentionally
 does not embed the hosted site in a WebView. Debt calculation, editing, local
 History, Chinese UI, automatic/manual currency and theme preferences, text
 sharing, portrait settlement image export, and “Save & start new” all run
-on-device through WeChat APIs. A separate opt-in shared-room flow can synchronize
-one selected ledger with invited WeChat members.
+on-device through WeChat APIs. A separate opt-in shared-room flow lets users
+create an empty room, invite WeChat members, and synchronize that room only.
 
 ## Open locally
 
@@ -33,6 +33,10 @@ After the registered AppID is attached to an authorized CloudBase environment,
 put its environment ID in `miniprogram/config/cloud.js`, create the private
 `ledger_*` collections, and deploy the `ledger` function. The shared entry stays
 hidden while the environment ID is empty.
+
+Shared-room identity comes from the Cloud Function's WeChat context. Users
+confirm only a room nickname; the mini program does not request or store WeChat
+avatars and renders initials locally.
 
 ```bash
 npm run mini:cloud:list

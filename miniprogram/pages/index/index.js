@@ -1,6 +1,6 @@
 import { simplifyDebts } from '../../lib/debts'
 import { detectCurrency, getMessages, translate } from '../../lib/i18n'
-import { callLedger, debtStateToRoomState, getCachedRooms, isZeroDecimalCurrency, makeMutationId, parseAmountMinor, saveRoomCache, sharedRoomsAvailable } from '../../lib/rooms'
+import { callLedger, getCachedRooms, isZeroDecimalCurrency, makeMutationId, parseAmountMinor, saveRoomCache, sharedRoomsAvailable } from '../../lib/rooms'
 import {
   createHistoryEntry,
   CURRENCIES,
@@ -89,6 +89,9 @@ function sharedRoomError(error) {
     invalid_expenses: '单个共享账单最多支持 60 笔支出。',
     invalid_amount_precision: '当前币种只支持整数金额，请先检查支出。',
     duplicate_participant: '参与人姓名不能重复。',
+    invalid_display_name: '请输入 1–28 个字符的昵称。',
+    invalid_profile: '请输入你的昵称。',
+    legacy_identity_forbidden: '共享账单流程已更新，请重新创建。',
   }
   return messages[error && error.code] || '创建共享账单失败，请稍后重试。'
 }
@@ -136,6 +139,7 @@ Page({
     historyCount: 0,
     lastExportPath: '',
     currencyValues: ['auto', ...CURRENCIES],
+    roomCurrencyValues: CURRENCIES,
     currencyLabels: [],
     currencyIndex: 0,
     themeLabels: [],
@@ -146,9 +150,8 @@ Page({
     sharedRoomsEnabled: false,
     showShareRoomDialog: false,
     shareRoomTitleInput: '',
-    shareDisplayNameInput: '',
-    shareOwnerNames: [],
-    shareOwnerIndex: 0,
+    shareNicknameInput: '',
+    shareCurrencyIndex: CURRENCIES.indexOf('CNY'),
     creatingSharedRoom: false,
   },
 
@@ -499,18 +502,14 @@ Page({
       wx.showToast({ title: this.data.t.sharedUnavailable, icon: 'none' })
       return
     }
-    if (this.data.state.participants.length < 2 || this.data.state.expenses.length === 0) {
-      wx.showToast({ title: this.data.t.sharedNeedsBill, icon: 'none' })
-      return
-    }
     const date = new Date()
     const title = `${date.getMonth() + 1}月${date.getDate()}日分账`
+    this.pendingRoomCreate = null
     this.setData({
       showShareRoomDialog: true,
       shareRoomTitleInput: title,
-      shareDisplayNameInput: this.data.state.participants[0]?.name || '我',
-      shareOwnerNames: [this.data.t.noClaim, ...this.data.state.participants.map(({ name }) => name)],
-      shareOwnerIndex: 1,
+      shareNicknameInput: '',
+      shareCurrencyIndex: Math.max(0, CURRENCIES.indexOf(this.data.state.currency)),
     })
   },
 
@@ -518,17 +517,12 @@ Page({
     this.setData({ shareRoomTitleInput: event.detail.value })
   },
 
-  onShareDisplayNameInput(event) {
-    this.setData({ shareDisplayNameInput: event.detail.value })
+  onShareNicknameInput(event) {
+    this.setData({ shareNicknameInput: event.detail.value })
   },
 
-  onShareOwnerChange(event) {
-    const index = Number(event.detail.value)
-    const participant = this.data.state.participants[index - 1]
-    this.setData({
-      shareOwnerIndex: index,
-      shareDisplayNameInput: participant ? participant.name : this.data.shareDisplayNameInput,
-    })
+  onShareCurrencyChange(event) {
+    this.setData({ shareCurrencyIndex: Number(event.detail.value) })
   },
 
   closeShareRoomDialog() {
@@ -539,24 +533,17 @@ Page({
   async confirmCreateSharedRoom() {
     if (this.data.creatingSharedRoom) return
     const title = this.data.shareRoomTitleInput.trim()
-    const displayName = this.data.shareDisplayNameInput.trim()
-    if (!title || !displayName) {
-      wx.showToast({ title: this.data.t.sharedNameRequired, icon: 'none' })
+    const nickname = this.data.shareNicknameInput.trim()
+    const currency = CURRENCIES[this.data.shareCurrencyIndex] || this.data.state.currency
+    if (!title) {
+      wx.showToast({ title: '请输入账单名称', icon: 'none' })
       return
     }
-    const ownerParticipant = this.data.state.participants[this.data.shareOwnerIndex - 1]
-    let request
-    try {
-      request = {
-        title,
-        displayName,
-        ownerParticipantId: ownerParticipant?.id || '',
-        state: debtStateToRoomState(this.data.state),
-      }
-    } catch (error) {
-      wx.showToast({ title: sharedRoomError(error), icon: 'none', duration: 2800 })
+    if (!nickname) {
+      wx.showToast({ title: '请输入你的昵称', icon: 'none' })
       return
     }
+    const request = { title, currency, nickname }
     const fingerprint = JSON.stringify(request)
     if (!this.pendingRoomCreate || this.pendingRoomCreate.fingerprint !== fingerprint) {
       this.pendingRoomCreate = { fingerprint, mutationId: makeMutationId('room-create') }
@@ -564,7 +551,10 @@ Page({
     this.setData({ creatingSharedRoom: true })
     try {
       const result = await callLedger('room_create', {
-        ...request,
+        title,
+        currency,
+        roundToWhole: false,
+        profile: { nickname },
         mutationId: this.pendingRoomCreate.mutationId,
       })
       this.pendingRoomCreate = null

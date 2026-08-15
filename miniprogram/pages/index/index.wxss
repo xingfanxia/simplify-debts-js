@@ -269,12 +269,12 @@
 .rounding-control > view { flex: 1; }
 .rounding-control text:first-child { font-size: 23rpx; font-weight: 700; }
 .rounding-control text:last-child { margin-top: 4rpx; color: var(--muted); font-size: 22rpx; line-height: 1.4; }
-.shared-room-cta { display: grid; grid-template-columns: minmax(0, 1fr) 210rpx; gap: 16rpx; margin-top: 18rpx; padding: 18rpx; align-items: center; background: var(--accent); border: 2rpx solid var(--line); border-radius: 16rpx; }
-.shared-room-cta > view { min-width: 0; }
-.shared-room-cta text { display: block; }
-.shared-room-cta > view text:first-child { font-size: 24rpx; font-weight: 750; }
-.shared-room-cta > view text:last-child { margin-top: 4rpx; color: var(--muted); font-size: 24rpx; line-height: 1.4; }
-.shared-room-cta button { display: flex; width: 100%; height: 78rpx; padding: 0 14rpx; align-items: center; justify-content: space-between; color: var(--primary-ink); font-size: 26rpx; font-weight: 750; line-height: 78rpx; background: var(--primary); border-radius: 12rpx; }
+.shared-launcher { display: grid; grid-template-columns: minmax(0, 1fr) 248rpx; gap: 18rpx; margin-bottom: 20rpx; padding: 22rpx 24rpx; align-items: center; background: var(--surface); border: 2rpx solid var(--line); border-radius: 20rpx; }
+.shared-launcher-copy, .shared-launcher text { display: block; }
+.shared-launcher-copy { min-width: 0; }
+.shared-launcher-title { font-size: 28rpx; font-weight: 750; }
+.shared-launcher-help { margin-top: 5rpx; color: var(--muted); font-size: 23rpx; line-height: 1.4; }
+.shared-launcher button { display: flex; width: 100%; height: 78rpx; margin: 0; padding: 0 16rpx; align-items: center; justify-content: space-between; color: var(--primary-ink); font-size: 25rpx; font-weight: 750; line-height: 78rpx; background: var(--primary); border-radius: 13rpx; }
 .share-canvas { position: fixed; top: 0; left: -9999px; opacity: 0; pointer-events: none; }
 
 .save-dialog-backdrop {
@@ -328,8 +328,15 @@
   .history-button { flex-basis: 138rpx; width: 138rpx; min-width: 138rpx; padding: 0 12rpx; }
   .quick-settings { flex-basis: 372rpx; width: 372rpx; }
   .quick-label { display: none; }
-  .shared-room-cta { grid-template-columns: 1fr; }
-  .shared-room-cta button { height: 84rpx; }
+  .shared-launcher { grid-template-columns: 1fr; padding: 20rpx; }
+  .shared-launcher-title { font-size: 16px; }
+  .shared-launcher-help, .save-dialog-help { font-size: 14px; }
+  .shared-launcher button { min-height: 44px; font-size: 15px; }
+  .save-dialog-title { font-size: 18px; }
+  .dialog-label { font-size: 13px; }
+  .share-room-dialog .dialog-input { height: 46px; font-size: 16px; }
+  .share-room-dialog .dialog-picker { line-height: 46px; }
+  .share-room-dialog .save-dialog-actions button { min-height: 44px; font-size: 14px; line-height: 44px; }
   .transfer-people { grid-template-columns: minmax(0, 1fr) minmax(140rpx, auto) minmax(0, 1fr); gap: 8rpx; }
   .direction-amount { font-size: 23rpx; }
 }

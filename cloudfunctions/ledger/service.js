@@ -134,6 +134,18 @@ function normalizeMutationId(value) {
   return mutationId
 }
 
+function rejectLegacyIdentity(event) {
+  const legacyFields = ['state', 'displayName', 'ownerParticipantId', 'claimParticipantId', 'newParticipantName']
+  assert(!legacyFields.some((field) => Object.prototype.hasOwnProperty.call(event, field)), 'legacy_identity_forbidden')
+}
+
+function normalizeProfile(event) {
+  assert(isRecord(event.profile), 'invalid_profile')
+  assert(Object.keys(event.profile).every((key) => key === 'nickname'), 'invalid_profile')
+  const displayName = cleanString(event.profile.nickname, LIMITS.displayName, 'invalid_display_name')
+  return { displayName }
+}
+
 function memberAuthId(hash, roomId, openid) {
   return hash(`member-auth:${roomId}:${openid}`)
 }
@@ -162,7 +174,14 @@ function sortByCreated(left, right) {
   return String(left.createdAt || '').localeCompare(String(right.createdAt || ''))
 }
 
-function createLedgerService({ repository, openid, appid = '', now = () => new Date(), makeToken = defaultToken, hash = defaultHash }) {
+function createLedgerService({
+  repository,
+  openid,
+  appid = '',
+  now = () => new Date(),
+  makeToken = defaultToken,
+  hash = defaultHash,
+}) {
   assert(repository && typeof repository.runTransaction === 'function', 'repository_unavailable')
   assert(typeof repository.runRead === 'function', 'repository_unavailable')
   assert(typeof openid === 'string' && openid, 'no_openid')
@@ -188,7 +207,8 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
     const participants = await tx.listParticipants(room._id)
     const expenses = await tx.listExpenses(room._id)
     const invites = self.role === 'owner' ? await tx.listInvites(room._id) : []
-    const visibleMembers = members.filter(active).sort(sortByCreated).map((member) => ({
+    const activeMembers = members.filter(active).sort(sortByCreated)
+    const visibleMembers = activeMembers.map((member) => ({
       memberId: member.memberId,
       displayName: member.displayName,
       role: member.role,
@@ -196,10 +216,12 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       joinedAt: member.joinedAt,
       isSelf: member.memberId === self.memberId,
     }))
+    const activeMemberIds = new Set(activeMembers.map(({ memberId }) => memberId))
     const visibleParticipants = participants.filter(active).sort(sortByCreated).map((participant) => ({
       participantId: participant.participantId,
       name: participant.name,
-      claimedByMemberId: participant.claimedByMemberId || '',
+      memberId: participant.memberId || participant.claimedByMemberId || '',
+      memberActive: activeMemberIds.has(participant.memberId || participant.claimedByMemberId || ''),
     }))
     const visibleExpenses = expenses.filter(active).sort(sortByCreated).map((expense) => ({
       expenseId: expense.expenseId,
@@ -243,14 +265,17 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
   }
 
   async function createRoom(event) {
+    rejectLegacyIdentity(event)
     const mutationId = normalizeMutationId(event.mutationId)
-    const state = normalizeState(event.state)
     const title = cleanString(event.title || '共享账单', LIMITS.title, 'invalid_title')
-    const requestedDisplayName = cleanString(event.displayName || '我', LIMITS.displayName, 'invalid_display_name')
-    const ownerSourceParticipantId = event.ownerParticipantId ? cleanString(event.ownerParticipantId, 96, 'invalid_participant') : ''
-    const sourceIds = new Set(state.participants.map(({ id: sourceId }) => sourceId))
-    assert(!ownerSourceParticipantId || sourceIds.has(ownerSourceParticipantId), 'invalid_participant')
-    const requestHash = hash(stableSerialize({ state, title, displayName: requestedDisplayName, ownerParticipantId: ownerSourceParticipantId }))
+    assert(CURRENCIES.has(event.currency), 'invalid_currency')
+    const profile = normalizeProfile(event)
+    const requestHash = hash(stableSerialize({
+      title,
+      currency: event.currency,
+      roundToWhole: event.roundToWhole === true,
+      profile,
+    }))
 
     const created = await repository.runTransaction(async (tx) => {
       const requestDocumentId = roomCreateMutationDocId(hash, openid, mutationId)
@@ -262,41 +287,21 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       const createdAt = timestamp()
       const roomId = id('room', 18)
       const ownerMemberId = id('member')
-      const idMap = new Map(state.participants.map((participant) => [participant.id, id('person')]))
-      const ownerParticipantId = ownerSourceParticipantId ? idMap.get(ownerSourceParticipantId) : ''
-      const participantDocuments = state.participants.map((source) => {
-        const participantId = idMap.get(source.id)
-        return {
-          _id: entityDocId(hash, 'participant', roomId, participantId),
-          roomId,
-          participantId,
-          name: source.name,
-          claimedByMemberId: participantId === ownerParticipantId ? ownerMemberId : null,
-          createdAt,
-          deletedAt: null,
-        }
-      })
-      const expenseDocuments = state.expenses.map((source) => {
-        const expenseId = id('expense')
-        return {
-          _id: entityDocId(hash, 'expense', roomId, expenseId),
-          roomId,
-          expenseId,
-          description: source.description,
-          amountMinor: source.amountMinor,
-          paidByParticipantId: idMap.get(source.paidBy),
-          splitParticipantIds: source.splitWith.map((participantId) => idMap.get(participantId)),
-          createdByMemberId: ownerMemberId,
-          createdAt,
-          updatedAt: createdAt,
-          deletedAt: null,
-        }
-      })
+      const ownerParticipantId = id('person')
+      const ownerParticipant = {
+        _id: entityDocId(hash, 'participant', roomId, ownerParticipantId),
+        roomId,
+        participantId: ownerParticipantId,
+        name: profile.displayName,
+        memberId: ownerMemberId,
+        createdAt,
+        deletedAt: null,
+      }
       const room = {
         _id: roomId,
         title,
-        currency: state.currency,
-        roundToWhole: state.roundToWhole,
+        currency: event.currency,
+        roundToWhole: event.roundToWhole === true,
         ownerMemberId,
         revision: 1,
         status: 'active',
@@ -304,17 +309,17 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
         updatedAt: createdAt,
         deletedAt: null,
         memberDocIds: [memberAuthId(hash, roomId, openid)],
-        participantDocIds: participantDocuments.map(({ _id }) => _id),
-        expenseDocIds: expenseDocuments.map(({ _id }) => _id),
+        participantDocIds: [ownerParticipant._id],
+        expenseDocIds: [],
         inviteIds: [],
       }
       const owner = {
         _id: memberAuthId(hash, roomId, openid),
         roomId,
         memberId: ownerMemberId,
-        displayName: requestedDisplayName,
+        displayName: profile.displayName,
         role: 'owner',
-        participantId: ownerParticipantId || null,
+        participantId: ownerParticipantId,
         joinedAt: createdAt,
         revokedAt: null,
         revokedReason: null,
@@ -322,8 +327,7 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       }
       await tx.putRoom(room)
       await tx.putMember(owner)
-      for (const participant of participantDocuments) await tx.putParticipant(participant)
-      for (const expense of expenseDocuments) await tx.putExpense(expense)
+      await tx.putParticipant(ownerParticipant)
       await tx.putMutation({
         _id: requestDocumentId,
         roomId,
@@ -434,18 +438,22 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
     return repository.runRead(async (tx) => {
       const currentTime = timestamp()
       const invite = await tx.getInvite(hash(token))
-      assertInviteUsable(invite, currentTime)
+      assert(invite, 'invite_invalid')
       const room = await requireRoom(tx, invite.roomId)
-      assert(room.status === 'active', 'room_not_active')
-      const allParticipants = (await tx.listParticipants(room._id)).filter(active)
-      const participants = allParticipants.filter((participant) => !participant.claimedByMemberId)
+      const existing = await tx.getMember(memberAuthId(hash, room._id, openid))
+      const alreadyJoined = active(existing)
+      if (!alreadyJoined) {
+        assertInviteUsable(invite, currentTime)
+        assert(room.status === 'active', 'room_not_active')
+      }
+      const members = (await tx.listMembers(room._id)).filter(active)
       return {
         ok: true,
         preview: {
           title: room.title,
           currency: room.currency,
-          participantCount: allParticipants.length,
-          claimableParticipants: participants.sort(sortByCreated).map(({ participantId, name }) => ({ participantId, name })),
+          memberCount: members.length,
+          alreadyJoined,
           expiresAt: invite.expiresAt,
         },
       }
@@ -453,11 +461,22 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
   }
 
   async function joinRoom(event) {
+    rejectLegacyIdentity(event)
     const token = normalizeInviteToken(event.invite)
-    const displayName = cleanString(event.displayName, LIMITS.displayName, 'invalid_display_name')
-    const claimParticipantId = event.claimParticipantId ? cleanString(event.claimParticipantId, 80, 'invalid_participant') : ''
-    const newParticipantName = event.newParticipantName ? cleanString(event.newParticipantName, LIMITS.participantName, 'invalid_participant') : ''
-    assert(Boolean(claimParticipantId) !== Boolean(newParticipantName), 'invalid_join_choice')
+    const mutationId = normalizeMutationId(event.mutationId)
+
+    const membership = await repository.runRead(async (tx) => {
+      const invite = await tx.getInvite(hash(token))
+      assert(invite, 'invite_invalid')
+      const room = await requireRoom(tx, invite.roomId)
+      const member = await tx.getMember(memberAuthId(hash, room._id, openid))
+      return { roomId: room._id, alreadyJoined: active(member) }
+    })
+    if (membership.alreadyJoined) {
+      return { ok: true, alreadyJoined: true, snapshot: await readAuthorizedSnapshot(membership.roomId) }
+    }
+
+    const profile = normalizeProfile(event)
 
     const joined = await repository.runTransaction(async (tx) => {
       const currentTime = timestamp()
@@ -481,57 +500,88 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       const members = (await tx.listMembers(room._id)).filter(active)
       assert(members.length < LIMITS.members, 'room_full')
       const participants = (await tx.listParticipants(room._id)).filter(active)
-      let participantId = ''
-      if (claimParticipantId) {
-        const participant = participants.find((item) => item.participantId === claimParticipantId)
-        assert(participant && !participant.claimedByMemberId, 'participant_unavailable')
-        participantId = participant.participantId
-      } else if (newParticipantName) {
-        assert(participants.length < LIMITS.participants, 'participant_limit')
-        const normalizedName = newParticipantName.toLocaleLowerCase()
-        assert(!participants.some(({ name }) => name.toLocaleLowerCase() === normalizedName), 'duplicate_participant')
-        participantId = id('person')
-      }
-      const memberId = id('member')
+      assert(participants.length < LIMITS.participants || Boolean(existing && existing.participantId), 'participant_limit')
+      const participantId = existing && existing.participantId ? existing.participantId : id('person')
+      const memberId = existing && existing.memberId ? existing.memberId : id('member')
       const member = {
         _id: authId,
         roomId: room._id,
         memberId,
-        displayName,
+        displayName: profile.displayName,
         role: 'editor',
-        participantId: participantId || null,
+        participantId,
         joinedAt: currentTime,
         revokedAt: null,
         revokedReason: null,
         revokedAtRevision: null,
       }
-      if (claimParticipantId) {
-        const participant = participants.find((item) => item.participantId === participantId)
-        await tx.putParticipant({ ...participant, claimedByMemberId: memberId })
-      } else if (newParticipantName) {
-        await tx.putParticipant({
+      const existingParticipant = participants.find((item) => item.participantId === participantId)
+      const participantDocument = existingParticipant ? {
+        ...existingParticipant,
+        name: profile.displayName,
+        memberId,
+        claimedByMemberId: null,
+        deletedAt: null,
+      } : {
           _id: entityDocId(hash, 'participant', room._id, participantId),
           roomId: room._id,
           participantId,
-          name: newParticipantName,
-          claimedByMemberId: memberId,
+          name: profile.displayName,
+          memberId,
           createdAt: currentTime,
           deletedAt: null,
-        })
-      }
+        }
+      await tx.putParticipant(participantDocument)
       await tx.putMember(member)
       await tx.putInvite({ ...invite, usedCount: invite.usedCount + 1 })
       const nextRoom = {
         ...room,
         revision: room.revision + 1,
         updatedAt: currentTime,
-        memberDocIds: [...(room.memberDocIds || []), member._id],
-        participantDocIds: newParticipantName ? [...(room.participantDocIds || []), entityDocId(hash, 'participant', room._id, participantId)] : (room.participantDocIds || []),
+        memberDocIds: [...new Set([...(room.memberDocIds || []), member._id])],
+        participantDocIds: [...new Set([...(room.participantDocIds || []), participantDocument._id])],
       }
       await tx.putRoom(nextRoom)
       return { roomId: room._id, alreadyJoined: false }
     })
     return { ok: true, alreadyJoined: joined.alreadyJoined, snapshot: await readAuthorizedSnapshot(joined.roomId) }
+  }
+
+  async function updateProfile(event) {
+    const { roomId, baseRevision, mutationId } = normalizeMutation(event)
+    const profile = normalizeProfile(event)
+    const requestHash = hash(stableSerialize({ profile }))
+    return repository.runTransaction(async (tx) => {
+      const room = await requireRoom(tx, roomId)
+      const member = await requireMember(tx, roomId)
+      const mutationIdHash = mutationDocId(hash, roomId, member.memberId, mutationId)
+      const replay = await tx.getMutation(mutationIdHash)
+      if (replay) {
+        assert(replay.requestHash === requestHash, 'mutation_mismatch')
+        return { ok: true, revision: replay.revision, replayed: true }
+      }
+      assert(room.status === 'active', 'room_not_active')
+      assert(room.revision === baseRevision, 'revision_conflict', { currentRevision: room.revision })
+      const currentTime = timestamp()
+      const participants = await tx.listParticipants(roomId)
+      const participant = participants.find((item) => item.participantId === member.participantId && active(item))
+      assert(participant, 'participant_not_found')
+      await tx.putMember({ ...member, displayName: profile.displayName })
+      await tx.putParticipant({ ...participant, name: profile.displayName, memberId: member.memberId, claimedByMemberId: null })
+      const nextRoom = { ...room, revision: room.revision + 1, updatedAt: currentTime }
+      await tx.putRoom(nextRoom)
+      await tx.putMutation({
+        _id: mutationIdHash,
+        roomId,
+        mutationId,
+        memberId: member.memberId,
+        kind: 'room_profile_update',
+        requestHash,
+        revision: nextRoom.revision,
+        createdAt: currentTime,
+      })
+      return { ok: true, revision: nextRoom.revision }
+    })
   }
 
   async function readAuthorizedSnapshot(roomId) {
@@ -563,8 +613,8 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
   }
 
   async function applyMutation(tx, room, member, kind, payload, currentTime) {
-    const participants = (await tx.listParticipants(room._id)).filter(active)
-    const participantIds = new Set(participants.map(({ participantId }) => participantId))
+    const activeMembers = (await tx.listMembers(room._id)).filter(active)
+    const participantIds = new Set(activeMembers.map(({ participantId }) => participantId).filter(Boolean))
     if (kind === 'upsert_expense') {
       assert(isRecord(payload.expense), 'invalid_expense')
       const incoming = payload.expense
@@ -608,44 +658,8 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       room.expenseDocIds = (room.expenseDocIds || []).filter((documentId) => documentId !== existing._id)
       return { entityId: expenseId }
     }
-    if (kind === 'add_participant') {
-      assert(participants.length < LIMITS.participants, 'participant_limit')
-      const name = cleanString(payload.name, LIMITS.participantName, 'invalid_participant')
-      assert(!participants.some((participant) => participant.name.toLocaleLowerCase() === name.toLocaleLowerCase()), 'duplicate_participant')
-      const participantId = id('person')
-      const participantDocId = entityDocId(hash, 'participant', room._id, participantId)
-      await tx.putParticipant({
-        _id: participantDocId,
-        roomId: room._id,
-        participantId,
-        name,
-        claimedByMemberId: null,
-        createdAt: currentTime,
-        deletedAt: null,
-      })
-      room.participantDocIds = [...(room.participantDocIds || []), participantDocId]
-      return { entityId: participantId }
-    }
-    if (kind === 'rename_participant') {
-      const participantId = cleanString(payload.participantId, 80, 'invalid_participant')
-      const name = cleanString(payload.name, LIMITS.participantName, 'invalid_participant')
-      const participant = participants.find((item) => item.participantId === participantId)
-      assert(participant, 'participant_not_found')
-      assert(!participants.some((item) => item.participantId !== participantId && item.name.toLocaleLowerCase() === name.toLocaleLowerCase()), 'duplicate_participant')
-      await tx.putParticipant({ ...participant, name })
-      return { entityId: participantId }
-    }
-    if (kind === 'remove_participant') {
-      const participantId = cleanString(payload.participantId, 80, 'invalid_participant')
-      const participant = participants.find((item) => item.participantId === participantId)
-      assert(participant, 'participant_not_found')
-      assert(participants.length > 2, 'participant_minimum')
-      assert(!participant.claimedByMemberId, 'participant_claimed')
-      const expenses = (await tx.listExpenses(room._id)).filter(active)
-      assert(!expenses.some((expense) => expense.paidByParticipantId === participantId || expense.splitParticipantIds.includes(participantId)), 'participant_in_use')
-      await tx.putParticipant({ ...participant, deletedAt: currentTime })
-      room.participantDocIds = (room.participantDocIds || []).filter((documentId) => documentId !== participant._id)
-      return { entityId: participantId }
+    if (['add_participant', 'rename_participant', 'remove_participant'].includes(kind)) {
+      throw new LedgerError('legacy_identity_forbidden')
     }
     if (kind === 'set_rounding') {
       room.roundToWhole = payload.roundToWhole === true
@@ -732,20 +746,10 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
         assert(target, 'member_not_found')
         await tx.putMember({ ...target, revokedAt: currentTime, revokedReason: 'removed', revokedAtRevision: room.revision + 1 })
         room.memberDocIds = (room.memberDocIds || []).filter((documentId) => documentId !== target._id)
-        if (target.participantId) {
-          const participants = await tx.listParticipants(roomId)
-          const claimed = participants.find((participant) => participant.participantId === target.participantId && active(participant))
-          if (claimed) await tx.putParticipant({ ...claimed, claimedByMemberId: null })
-        }
       } else if (kind === 'leave_room') {
         assert(member.role !== 'owner', 'owner_cannot_leave')
         await tx.putMember({ ...member, revokedAt: currentTime, revokedReason: 'left', revokedAtRevision: room.revision + 1 })
         room.memberDocIds = (room.memberDocIds || []).filter((documentId) => documentId !== member._id)
-        if (member.participantId) {
-          const participants = await tx.listParticipants(roomId)
-          const claimed = participants.find((participant) => participant.participantId === member.participantId && active(participant))
-          if (claimed) await tx.putParticipant({ ...claimed, claimedByMemberId: null })
-        }
       } else if (kind === 'revoke_invite') {
         assert(member.role === 'owner', 'owner_required')
         const inviteId = cleanString(payload.inviteId, 80, 'invalid_invite')
@@ -793,6 +797,7 @@ function createLedgerService({ repository, openid, appid = '', now = () => new D
       if (action === 'room_join_preview') return await invitePreview(event)
       if (action === 'room_join') return await joinRoom(event)
       if (action === 'room_get') return await getRoom(event)
+      if (action === 'room_profile_update') return await updateProfile(event)
       if (action === 'room_mutate') return await mutateRoom(event)
       if (action === 'room_manage') return await manageRoom(event)
       throw new LedgerError('unknown_action')

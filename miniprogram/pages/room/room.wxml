@@ -15,28 +15,17 @@
     <view class="join-heading">
       <text class="overline">共享账单邀请</text>
       <text class="join-title">{{preview.title}}</text>
-      <text class="join-meta">{{preview.currency}} · {{preview.participantCount}} 位参与人</text>
+      <text class="join-meta">{{preview.currency}} · {{preview.memberCount}} 位成员</text>
     </view>
 
     <view class="join-card">
-      <text class="card-title">加入前确认身份</text>
-      <text class="card-help">加入后才能查看支出；其他成员会看到你填写的名称。</text>
-      <label class="field-label">你的显示名称</label>
-      <input class="field-input" value="{{joinDisplayName}}" maxlength="28" placeholder="例如：小夏" bindinput="onJoinNameInput" />
-
-      <label class="field-label identity-label">你是账单里的谁？</label>
-      <view class="identity-list">
-        <button class="identity-option {{joinChoice === item.participantId ? 'is-selected' : ''}}" wx:for="{{preview.claimableParticipants}}" wx:key="participantId" data-id="{{item.participantId}}" bindtap="selectJoinChoice">
-          <view class="identity-dot"></view><text>{{item.name}}</text><text>{{joinChoice === item.participantId ? '✓' : ''}}</text>
-        </button>
-        <button class="identity-option {{joinChoice === '__new__' ? 'is-selected' : ''}}" data-id="__new__" bindtap="selectJoinChoice">
-          <view class="identity-dot"></view><text>我是新参与人</text><text>{{joinChoice === '__new__' ? '✓' : ''}}</text>
-        </button>
-      </view>
-      <input class="field-input new-person-field" wx:if="{{joinChoice === '__new__'}}" value="{{newParticipantName}}" maxlength="28" placeholder="输入参与人姓名" bindinput="onNewParticipantInput" />
-      <button class="primary-button" loading="{{joining}}" disabled="{{joining}}" bindtap="joinRoom">加入共享账单 <text>→</text></button>
+      <text class="card-title">加入共享账单</text>
+      <text class="card-help">确认一个群里好认的昵称。加入后，你可以和其他成员一起添加和修改支出。</text>
+      <label class="field-label">你的昵称</label>
+      <input class="field-input" type="nickname" value="{{joinNickname}}" maxlength="28" placeholder="在账单中显示的名字" bindinput="onJoinNicknameInput" />
+      <button class="primary-button" loading="{{joining}}" disabled="{{joining}}" bindtap="joinRoom">确认加入 <text>→</text></button>
     </view>
-    <text class="privacy-note">加入后，这笔账会从云端同步到你的设备。</text>
+    <text class="privacy-note">微信账号仅用于确认成员身份，不会显示给其他人。</text>
   </view>
 
   <block wx:elif="{{mode === 'room'}}">
@@ -60,21 +49,6 @@
         <view><text>总支出</text><text>{{totalSpendText}}</text></view>
         <view><text>支出</text><text>{{expensesView.length}}</text></view>
         <view><text>还款</text><text>{{transfersView.length}}</text></view>
-      </view>
-
-      <view class="tool-card">
-        <view class="card-heading"><view><text class="card-title">参与人</text><text class="card-help">账单里的姓名和微信成员分开管理。</text></view><text>{{participantsView.length}}</text></view>
-        <view class="participant-grid">
-          <view class="participant-chip" wx:for="{{participantsView}}" wx:key="participantId">
-            <view class="avatar {{item.avatarClass}}">{{item.initials}}</view>
-            <view class="participant-copy"><text>{{item.name}}</text><text>{{item.isClaimed ? '已认领' : '未认领'}}</text></view>
-            <view class="participant-actions" wx:if="{{!readOnly}}"><button data-id="{{item.participantId}}" bindtap="renameParticipant">编辑</button><button wx:if="{{item.canRemove}}" class="danger-text" data-id="{{item.participantId}}" bindtap="removeParticipant">删除</button></view>
-          </view>
-        </view>
-        <view class="inline-form" wx:if="{{!readOnly}}">
-          <input value="{{newParticipantInput}}" maxlength="28" placeholder="添加参与人" bindinput="onParticipantInput" bindconfirm="addParticipant" />
-          <button bindtap="addParticipant">添加</button>
-        </view>
       </view>
 
       <view class="tool-card" id="shared-expense-composer">
@@ -119,8 +93,13 @@
       </view>
 
       <view class="tool-card members-card">
-        <view class="card-heading"><view><text class="card-title">房间成员</text><text class="card-help">只有已加入的微信用户可以查看完整账单。</text></view></view>
-        <view class="member-row" wx:for="{{membersView}}" wx:key="memberId"><view class="avatar {{item.avatarClass}}">{{item.initials}}</view><view><text>{{item.displayName}}{{item.isSelf ? '（你）' : ''}}</text><text>{{item.roleText}}</text></view><button wx:if="{{item.canRemove && !readOnly}}" data-id="{{item.memberId}}" bindtap="removeMember">移除</button></view>
+        <view class="card-heading"><view><text class="card-title">成员</text><text class="card-help">加入的成员都可以共同记账。</text></view><text>{{membersView.length}}</text></view>
+        <view class="member-row" wx:for="{{membersView}}" wx:key="memberId">
+          <view class="avatar {{item.avatarClass}}">{{item.initials}}</view>
+          <view><text>{{item.displayName}}{{item.isSelf ? '（你）' : ''}}</text><text>{{item.roleText}}</text></view>
+          <button wx:if="{{item.canEditProfile}}" bindtap="openProfileDialog">改昵称</button>
+          <button wx:elif="{{item.canRemove && !readOnly}}" class="danger-text" data-id="{{item.memberId}}" bindtap="removeMember">移除</button>
+        </view>
       </view>
 
       <view class="tool-card" wx:if="{{canManage && inviteListView.length}}">
@@ -138,5 +117,17 @@
       <text class="privacy-footer">云端仅当前成员可访问；本机保留最近同步的只读副本。</text>
     </view>
   </block>
+
+  <view class="dialog-backdrop" wx:if="{{showProfileDialog}}" bindtap="closeProfileDialog">
+    <view class="profile-dialog" catchtap="noop">
+      <text class="card-title">修改昵称</text>
+      <text class="card-help">新昵称会同步给这个账单里的所有成员。</text>
+      <input class="field-input profile-input" type="nickname" value="{{profileNicknameInput}}" maxlength="28" placeholder="在账单中显示的名字" bindinput="onProfileNicknameInput" />
+      <view class="dialog-actions">
+        <button disabled="{{updatingProfile}}" bindtap="closeProfileDialog">取消</button>
+        <button class="dialog-primary" loading="{{updatingProfile}}" disabled="{{updatingProfile}}" bindtap="updateProfile">保存</button>
+      </view>
+    </view>
+  </view>
   <view class="safe-bottom"></view>
 </view>

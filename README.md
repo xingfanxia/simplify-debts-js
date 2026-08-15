@@ -73,7 +73,7 @@ The `miniprogram/` directory is a native mini program rather than an embedded we
 npm run mini:open
 ```
 
-The committed AppID is the registered Settle mini-program account. CloudBase is optional and is deliberately limited to a stateless health function; expense data remains on the device. See [the WeChat mini program guide](./docs/wechat-mini-program.md) and [release checklist](./docs/wechat-release-checklist.md).
+The committed AppID is the registered Settle mini-program account. Ordinary ledgers remain on-device. CloudBase is used only for shared rooms that a user explicitly creates or joins; see [the WeChat mini program guide](./docs/wechat-mini-program.md), [shared-room runbook](./docs/wechat-shared-room-runbook.md), and [release checklist](./docs/wechat-release-checklist.md).
 
 ## How the math works
 
@@ -81,7 +81,7 @@ Each expense is distributed in integer cents across its selected participants. S
 
 ## Privacy
 
-Participant names, expenses, and saved history are stored only in local browser/app/WeChat storage. Android cloud backup is disabled and the Android app requests no internet permission. The mini program does not send ledger data to CloudBase. Clearing site/app/mini-program data or uninstalling the native app permanently removes its local history, so export anything you need to keep first.
+Participant names, expenses, and saved history are stored only in local browser/app/WeChat storage by default. Android cloud backup is disabled and the Android app requests no internet permission. In the mini program, only an explicitly created or joined shared room synchronizes its nickname, membership, currency, and expenses through private CloudBase collections; ordinary ledgers are never uploaded. Clearing site/app/mini-program data or uninstalling the native app permanently removes local-only history, so export anything you need to keep first.
 
 ## License
 

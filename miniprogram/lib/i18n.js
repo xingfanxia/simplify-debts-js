@@ -13,9 +13,9 @@ const messages = {
     preferences: '设置', currency: '币种', automatic: '自动（当前 {value}）', theme: '外观', systemDefault: '跟随系统', systemShort: '跟随', light: '浅色', dark: '深色', privacyTitle: '本地账单默认仅保存在本机', privacyBody: '普通账单和历史记录不会上传。只有你明确创建的共享账单，才会把参与人和支出同步给已加入的房间成员。',
     exampleDinner: '周五晚餐', exampleGroceries: '民宿采购', exampleRide: '回程打车', someone: '某人', paymentFlow: '付款路径', paymentNumber: '付款 {index}', toMove: '待转金额', shareOverview: '{repayments} 笔还款 · {people} 人 · {currency}', madeWith: '隐私保护 · 数据仅保存在你的设备上',
     storageError: '保存失败，请稍后重试', imageExportFailed: '结算图生成失败',
-    createSharedBill: '创建共享账单', createSharedBillHelp: '邀请微信好友一起查看和记账。', sharedUploadNotice: '创建后，这笔账的参与人和支出将上传到云端，并同步给加入房间的成员。',
-    sharedBillName: '共享账单名称', yourDisplayName: '你的显示名称', claimYourself: '你是账单里的谁？', noClaim: '暂不认领参与人', sharedPrivacyNotice: '普通本地账单不会上传；只有这笔明确创建的共享账单会同步。', confirmCreateShared: '确认创建',
-    sharedUnavailable: '共享功能尚未连接云环境', sharedNeedsBill: '请先添加至少两人和一笔支出', sharedNameRequired: '请填写账单名称和显示名称',
+    createSharedBill: '新建共享账单', createSharedBillHelp: '创建空账单，邀请微信好友一起记账。', sharedUploadNotice: '只有这笔共享账单的昵称、成员关系和支出会同步到云端。',
+    sharedBillName: '共享账单名称', yourDisplayName: '你的昵称', sharedPrivacyNotice: '普通本地账单不会上传；只有明确创建或加入的共享账单会同步。', confirmCreateShared: '创建账单',
+    sharedUnavailable: '共享功能尚未连接云环境', sharedNameRequired: '请填写账单名称和昵称',
   },
 }
 

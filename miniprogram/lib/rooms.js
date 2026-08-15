@@ -1,8 +1,8 @@
 import { CLOUD_ENV_ID, SHARED_ROOMS_ENABLED } from '../config/cloud'
 import { CURRENCIES } from './storage'
 
-const ROOM_CACHE_PREFIX = 'settle-shared-room-cache-v1:'
-const ACTIVE_ROOM_IDS_KEY = 'settle-shared-room-ids-v1'
+const ROOM_CACHE_PREFIX = 'settle-shared-room-cache-v2:'
+const ACTIVE_ROOM_IDS_KEY = 'settle-shared-room-ids-v2'
 const MAX_CACHED_ROOMS = 12
 const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW'])
 const CURRENCY_SYMBOLS = {
@@ -56,7 +56,9 @@ export function formatMinorMoney(amountMinor, currency) {
 
 export function reconcileExpenseDraft(snapshot, editingExpenseId, value) {
   const form = isRecord(value) ? value : {}
-  const participants = Array.isArray(snapshot && snapshot.participants) ? snapshot.participants : []
+  const participants = Array.isArray(snapshot && snapshot.participants)
+    ? snapshot.participants.filter(({ memberActive }) => memberActive !== false)
+    : []
   const expenses = Array.isArray(snapshot && snapshot.expenses) ? snapshot.expenses : []
   const participantIds = participants.map(({ participantId }) => participantId).filter(Boolean)
   const participantIdSet = new Set(participantIds)
@@ -153,7 +155,8 @@ function validParticipant(value) {
   return isRecord(value)
     && Boolean(cleanString(value.participantId, 80))
     && Boolean(cleanString(value.name, 28))
-    && typeof value.claimedByMemberId === 'string'
+    && Boolean(cleanString(value.memberId, 80))
+    && typeof value.memberActive === 'boolean'
 }
 
 function validExpense(value, participantIds) {
@@ -180,7 +183,8 @@ export function parseRoomSnapshot(value) {
   const participants = value.participants.filter(validParticipant).map((participant) => ({
     participantId: participant.participantId,
     name: participant.name.trim(),
-    claimedByMemberId: participant.claimedByMemberId,
+    memberId: participant.memberId,
+    memberActive: participant.memberActive,
   }))
   if (participants.length !== value.participants.length) return null
   const participantIds = new Set(participants.map(({ participantId }) => participantId))
@@ -207,10 +211,10 @@ export function parseRoomSnapshot(value) {
   if (members.some((member) => !member.memberId || !member.displayName)) return null
   const memberIds = new Set(members.map(({ memberId }) => memberId))
   if (memberIds.size !== members.length || members.filter(({ role }) => role === 'owner').length !== 1) return null
-  if (members.some((member) => member.participantId && !participantIds.has(member.participantId))) return null
-  if (participants.some((participant) => participant.claimedByMemberId && !memberIds.has(participant.claimedByMemberId))) return null
-  if (members.some((member) => member.participantId && participants.find(({ participantId }) => participantId === member.participantId)?.claimedByMemberId !== member.memberId)) return null
-  if (participants.some((participant) => participant.claimedByMemberId && members.find(({ memberId }) => memberId === participant.claimedByMemberId)?.participantId !== participant.participantId)) return null
+  if (members.some((member) => !member.participantId || !participantIds.has(member.participantId))) return null
+  if (members.some((member) => participants.find(({ participantId }) => participantId === member.participantId)?.memberId !== member.memberId)) return null
+  if (participants.some((participant) => participant.memberActive && !memberIds.has(participant.memberId))) return null
+  if (participants.some((participant) => participant.memberActive && members.find(({ memberId }) => memberId === participant.memberId)?.participantId !== participant.participantId)) return null
   const selfMemberId = cleanString(value.self.memberId, 80)
   const selfMember = members.find(({ memberId }) => memberId === selfMemberId)
   const selfDisplayName = cleanString(value.self.displayName, 28)
@@ -283,7 +287,7 @@ export function saveRoomCache(value) {
   if (!snapshot) throw new RoomError('invalid_snapshot')
   try {
     wx.setStorageSync(`${ROOM_CACHE_PREFIX}${snapshot.room.roomId}`, {
-      version: 1,
+      version: 2,
       cachedAt: new Date().toISOString(),
       snapshot,
     })
@@ -299,7 +303,7 @@ export function getRoomCache(roomId) {
   if (!safeRoomId) return null
   try {
     const value = wx.getStorageSync(`${ROOM_CACHE_PREFIX}${safeRoomId}`)
-    if (!isRecord(value) || value.version !== 1) return null
+    if (!isRecord(value) || value.version !== 2) return null
     const snapshot = parseRoomSnapshot(value.snapshot)
     return snapshot ? { snapshot, cachedAt: cleanString(value.cachedAt, 40) } : null
   } catch (_error) {
