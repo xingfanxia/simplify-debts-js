@@ -78,7 +78,6 @@ npm run mini:configure -- --appid wx7413688ef0714f4a --cloud-env cloud1-d3gbdocp
 
 # Deploy to the explicit production environment and inspect the effective config.
 npm run mini:cloud:deploy:ledger
-npm run mini:cloud:deploy:cleanup
 /Applications/wechatwebdevtools.app/Contents/MacOS/cli cloud functions info \
   --env cloud1-d3gbdocpk8fcb2e97 --names ledger ledger_cleanup \
   --project "$PWD" --lang zh
@@ -93,6 +92,10 @@ explicit approval. Do not mark a build as an experience version, submit it for
 review, or release it until the privacy form is current and those later actions
 are separately approved. Run the two-account checklist in
 [wechat-shared-room-runbook.md](./wechat-shared-room-runbook.md) before review.
+
+The 2026-08-15 read-only preflight found no application-source change in
+`ledger_cleanup`, so the next deployment updates only `ledger`. Re-check the
+diff before any later release rather than redeploying unchanged functions by default.
 
 Before uploading, verify that the preview QR code is available to the registered
 account's developers and testers.
