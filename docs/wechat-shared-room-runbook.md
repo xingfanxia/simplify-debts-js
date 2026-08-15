@@ -17,7 +17,7 @@
 
 - 本地账单：继续使用微信本地存储，完全离线，不上传。
 - 共享账单：用户主动点击“创建共享账单”后，客户端调用 `ledger` 云函数。
-- 身份：云函数只使用 `cloud.getWXContext().OPENID`，不接受客户端声明的 OpenID、角色或房主身份。
+- 身份：云函数只使用 `cloud.getWXContext().OPENID`，不接受客户端声明的 OpenID、角色或房主身份。原始 OpenID 只在请求期间使用；应用集合仅保存“房间 ID + OpenID”的单向哈希文档键，且不同房间不可直接关联。
 - 数据访问：所有 `ledger_*` 集合均设置为“仅管理端可读写”；客户端只调用云函数。
 - 同步：页面打开立即拉取、`onShow` 拉取、前台每 2.5 秒轮询；revision 未变化时走轻量权限检查，变化时才取完整快照；离线只读本地缓存。
 - 并发：版本化写入包含 `baseRevision` 和稳定 `mutationId`；建房也带 `mutationId`，加入由微信身份唯一键天然幂等。服务端事务处理版本冲突与弱网重放；冲突响应附带已鉴权的最新快照，客户端直接刷新而不静默覆盖。
@@ -87,23 +87,27 @@ npm run mini:cloud:deploy:cleanup -- --env <environment-id>
 函数设置要求：
 
 - `ledger` 只允许小程序调用，不配置 HTTP 触发器；
-- `ledger_cleanup` 不配置 HTTP 触发器，配置每天一次的定时触发；
+- `ledger` 超时时间设为 20 秒；`ledger_cleanup` 超时时间设为 300 秒。部署后在函数配置页核对实际值，不依赖平台默认超时；
+- `ledger_cleanup` 不配置 HTTP 触发器；仓库内 `cloudfunctions/ledger_cleanup/config.json` 定义每天一次的七段 cron 定时触发。上传函数代码后还必须单独上传/核对触发器，确认控制台显示 `dailyLedgerRetention`；
+- `dailyLedgerRetention` 当前为 `0 20 3 * * * *`。部署前在控制台确认触发器时区；若平台显示 UTC，应按目标本地执行时间换算后再启用；
 - `ledger_cleanup` 会拒绝带 `OPENID` 的小程序交互调用，只允许无用户身份的定时任务执行；
 - 两个函数使用当前部署环境，不写固定密钥；
 - 日志不得记录完整 event、OpenID、邀请 token 或账单内容；
 - 为调用次数、数据库读写和存储设置预算告警。
 
+`ledger_cleanup` 每次最多处理 5 个到期房间，并以最多 10 个并发删除依赖文档；超大房间若一次未清完会保留房间墓碑，由下一次定时任务继续。只有所有成员、参与人、支出、邀请和幂等记录都清理完后才删除房间文档。
+
 ## 隐私保护指引事实
 
 平台隐私表和产品内说明应保持一致：
 
-- 无需注册账号；微信身份仅由云函数读取，用于判断房间成员权限；
+- 无需注册账号；微信身份仅由云函数在请求期间读取，用于派生房间内的授权键；应用集合不保存原始 OpenID；
 - 普通本地账单、偏好和历史记录仅保存在设备上；
 - 只有用户主动创建的共享账单才上传参与人姓名、成员显示名称、币种和支出；
 - 这些信息只用于向已加入成员同步账单和计算结算方案；
 - 邀请链接默认 7 天过期，可撤销并限制使用次数；云端只保存邀请 token 的哈希；
 - 房主可以删除共享账单，成员可以退出；软删除后立即停止访问，30 天后永久清理；
-- 退出或被移除后，旧邀请不能恢复访问；房主后续新生成的邀请可重新授权；
+- 退出或被移除后，旧邀请不能恢复访问；为执行这一限制，已撤销的房间内授权键会保留到房主删除账单并完成 30 天清理；房主后续新生成的邀请可重新授权；
 - 不收集联系人、精确位置、麦克风、健康、支付或广告标识；
 - 不使用广告 SDK；第三方 SDK 仅为微信 CloudBase 官方运行时；
 - 用户通过平台配置的开发者联系方式申请查询、更正或删除相关数据。
@@ -140,3 +144,11 @@ npm run mini:cloud:deploy:cleanup -- --env <environment-id>
 4. 回滚 `ledger` 到最后验证过的函数版本；
 5. 验证现有成员仍受权限保护后再恢复入口；
 6. 永久删除生产数据或环境前再次取得用户明确确认。
+
+## 官方部署依据
+
+- [微信小程序调用 CloudBase 云函数与 `getWXContext`](https://docs.cloudbase.net/recipes/add-cloud-function-wechat-miniprogram)
+- [数据库事务限制（最多 100 个操作、事务内仅支持 `doc`）](https://docs.cloudbase.net/database/transaction)
+- [数据库仅管理端权限](https://docs.cloudbase.net/database/data-permission)
+- [云函数七段 cron 定时触发器](https://docs.cloudbase.net/cloud-function/timer-trigger)
+- [云函数超时与运行配置](https://docs.cloudbase.net/cloud-function/function-configuration/config)

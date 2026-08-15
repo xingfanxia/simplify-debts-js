@@ -27,8 +27,10 @@ Use the following facts when completing the platform privacy form:
   storage on the user's device.
 - Participant names and expenses are uploaded only after the user explicitly
   creates a shared ledger. They are synchronized only to joined room members.
-- Shared-room authorization uses the caller's WeChat OpenID inside CloudBase;
-  OpenID is never returned to the client.
+- Shared-room authorization uses the caller's WeChat OpenID transiently inside
+  the Cloud Function. Application collections retain only a room-scoped one-way
+  authorization document ID; raw OpenID is neither persisted there nor returned
+  to the client.
 - Clipboard writing and image saving/sharing happen only after the user taps the
   corresponding action.
 - The mini program does not request contacts, precise location, microphone,

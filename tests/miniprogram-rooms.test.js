@@ -5,6 +5,7 @@ import { debtStateToRoomState, formatMinorMoney, parseAmountMinor, parseRoomSnap
 
 const require = createRequire(import.meta.url)
 const { LIMITS, createLedgerService } = require('../cloudfunctions/ledger/service.js')
+const { purgeCollection } = require('../cloudfunctions/ledger_cleanup/cleanup.js')
 const { RETENTION_DAYS, isInteractiveInvocation, purgeCutoff, shouldPurgeRoom } = require('../cloudfunctions/ledger_cleanup/policy.js')
 
 function clone(value) {
@@ -74,6 +75,9 @@ function createMemoryRepository() {
         listInvites: (roomId) => list(stores, 'invites', roomId),
       }
       return work(tx)
+    },
+    dump(name) {
+      return [...stores[name].values()].map(clone)
     },
   }
 }
@@ -185,12 +189,13 @@ describe('微信共享分账房间信任边界', () => {
   })
 
   it('创建时重新生成实体 ID，并且响应不泄露 OpenID', async () => {
-    const { created } = await fixture()
+    const { created, repository } = await fixture()
     expect(created.ok).toBe(true)
     expect(created.snapshot.room.title).toBe('周末旅行')
     expect(created.snapshot.participants).toHaveLength(3)
     expect(created.snapshot.participants.some(({ participantId }) => participantId === 'hao')).toBe(false)
     expect(JSON.stringify(created)).not.toMatch(/owner-openid|openid/i)
+    expect(repository.dump('members').every((member) => !Object.hasOwn(member, 'openid'))).toBe(true)
   })
 
   it('创建房间在响应丢失后使用同一 mutationId 重试不会重复建房', async () => {
@@ -233,7 +238,7 @@ describe('微信共享分账房间信任边界', () => {
   })
 
   it('邀请预览只返回最小信息，加入后才能看到支出', async () => {
-    const { owner, created, service } = await fixture()
+    const { owner, created, service, repository } = await fixture()
     const invitation = await createInvite(owner, created.snapshot)
     const token = inviteToken(invitation)
     const guest = service('guest-openid')
@@ -258,6 +263,7 @@ describe('微信共享分账房间信任边界', () => {
     expect(joined.ok).toBe(true)
     expect(joined.snapshot.expenses).toHaveLength(1)
     expect(JSON.stringify(joined)).not.toMatch(/guest-openid|owner-openid|openid/i)
+    expect(repository.dump('members').every((member) => !Object.hasOwn(member, 'openid'))).toBe(true)
   })
 
   it('过期和撤销的邀请都无法再加入', async () => {
@@ -673,6 +679,33 @@ describe('共享房间客户端边界', () => {
   })
 })
 
+function createCleanupDatabase(documentCount) {
+  const remaining = new Set(Array.from({ length: documentCount }, (_, index) => `document-${index}`))
+  return {
+    remaining,
+    database: {
+      collection() {
+        return {
+          where() {
+            return {
+              limit(limit) {
+                return {
+                  async get() {
+                    return { data: [...remaining].slice(0, limit).map((_id) => ({ _id })) }
+                  },
+                }
+              },
+            }
+          },
+          doc(documentId) {
+            return { async remove() { remaining.delete(documentId) } }
+          },
+        }
+      },
+    },
+  }
+}
+
 describe('共享账单删除保留期', () => {
   it('只清理已经软删除满 30 天的房间', () => {
     const now = new Date('2026-08-15T00:00:00.000Z')
@@ -687,5 +720,20 @@ describe('共享账单删除保留期', () => {
     expect(isInteractiveInvocation({ OPENID: 'user-openid' })).toBe(true)
     expect(isInteractiveInvocation({})).toBe(false)
     expect(isInteractiveInvocation(null)).toBe(false)
+  })
+
+  it('分批并发清理依赖文档，并在超过单次上限时保留房间墓碑', async () => {
+    const ordinary = createCleanupDatabase(230)
+    expect(await purgeCollection(ordinary.database, 'ledger_expenses', 'room-1')).toBe(true)
+    expect(ordinary.remaining.size).toBe(0)
+
+    const oversized = createCleanupDatabase(501)
+    expect(await purgeCollection(oversized.database, 'ledger_mutations', 'room-2')).toBe(false)
+    expect(oversized.remaining.size).toBe(1)
+  })
+
+  it('仓库携带每日七段 cron 清理触发器配置', () => {
+    const config = JSON.parse(readFileSync(new URL('../cloudfunctions/ledger_cleanup/config.json', import.meta.url), 'utf8'))
+    expect(config.triggers).toEqual([{ name: 'dailyLedgerRetention', type: 'timer', config: '0 20 3 * * * *' }])
   })
 })

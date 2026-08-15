@@ -12,7 +12,9 @@ and ordinary local ledgers are never uploaded.
 - `health`: stateless environment check. It receives no ledger data.
 - `ledger`: the only client-facing shared-ledger API. It derives identity from
   `cloud.getWXContext()`, validates every request, enforces room membership, and
-  performs writes with server-side transactions.
+  performs writes with server-side transactions. Application collections do not
+  persist raw OpenID; a room-scoped one-way authorization document ID is derived
+  at request time instead.
 - `ledger_cleanup`: scheduled retention worker. It permanently purges rooms 30
   days after an owner soft-deletes them. It rejects invocations carrying a mini
   program `OPENID`; do not expose it through an HTTP trigger.

@@ -22,13 +22,13 @@
 | 集合 | 关键字段 | 用途 |
 |---|---|---|
 | `ledger_rooms` | `_id`, `title`, `currency`, `ownerMemberId`, `revision`, `status`, `memberDocIds`, `participantDocIds`, `expenseDocIds`, `inviteIds` | 房间元数据、并发版本与事务内文档索引 |
-| `ledger_members` | `roomId`, `memberId`, `openid`, `displayName`, `role`, `participantId`, `joinedAt`, `revokedAt` | 微信身份、房间权限和参与人认领关系 |
+| `ledger_members` | `_id`（房间 ID + 运行时 OpenID 的单向哈希）, `roomId`, `memberId`, `displayName`, `role`, `participantId`, `joinedAt`, `revokedAt` | 房间权限和参与人认领关系；不保存原始 OpenID |
 | `ledger_participants` | `roomId`, `participantId`, `name`, `claimedByMemberId`, `createdAt` | 实际参与分账的人，包括未注册访客 |
 | `ledger_expenses` | `roomId`, `expenseId`, `description`, `amountMinor`, `paidByParticipantId`, `splitParticipantIds`, `createdByMemberId`, `updatedAt`, `deletedAt` | 支出事实；金额按币种最小单位保存（如分、日元、韩元） |
 | `ledger_invites` | `tokenHash`, `roomId`, `createdByMemberId`, `expiresAt`, `maxUses`, `usedCount`, `revokedAt` | 可撤销、可过期的邀请能力 |
 | `ledger_mutations` | `roomId`, `mutationId`, `memberId`, `kind`, `createdAt` | 写入重试的幂等记录，可按保留期清理 |
 
-OpenID 只存在于服务端成员文档中，不返回客户端；客户端看到的是随机 `memberId`。邀请链接只携带高熵 token，不把 `roomId` 当成授权凭证。
+云函数只在请求期间使用 `getWXContext()` 提供的 OpenID，并把“房间 ID + OpenID”的单向哈希作为成员文档键；应用集合不保存原始 OpenID，也不返回客户端。不同房间的键无法直接关联，客户端看到的只是随机 `memberId`。邀请链接只携带高熵 token，不把 `roomId` 当成授权凭证。
 
 共享房间已有支出时只展示相同小数精度的币种选项：两位小数币种之间可直接切换，JPY/KRW 两个整数币种之间可切换；删除全部支出后可跨组选择。服务端同样拒绝对已有支出做跨精度重解释，避免把 `12.34` 元静默变成 `1234` 日元。用户也可以在创建共享账单前从本地首页选择任意支持币种。
 
@@ -64,7 +64,7 @@ CloudBase 事务当前最多 100 次操作，并且事务内只支持 `doc`、�
 - 非成员拿到 roomId、expenseId 或旧缓存都不能从云端读取；邀请预览不含参与人余额和支出明细。
 - 成员被移除后，云端请求立即拒绝并在在线轮询时清除缓存。设备当时离线时，无法远程擦除其已同步的旧只读副本；该副本不能写入云端或获得后续更新，重新联网校验后会被清除。
 - 房主删除房间需要二次确认；服务端软删除后进入短期恢复窗，再异步清理相关集合。
-- 当前恢复窗为 30 天。`ledger_cleanup` 只按服务端时间清理已软删除满 30 天的房间，并在依赖文档全部删除后才删除房间文档。
+- 当前恢复窗为 30 天。`ledger_cleanup` 只按服务端时间分批清理已软删除满 30 天的房间，并在依赖文档全部删除后才删除房间文档；每日触发器使用仓库内可审查的七段 cron 配置，部署后仍要核对时区和实际触发状态。
 - 云端化会改变当前“数据仅保存在本机”的隐私声明。上线共享功能前必须更新小程序隐私保护指引、产品内文案、数据保留/删除说明和审核测试路径。
 
 ## 实施阶段
