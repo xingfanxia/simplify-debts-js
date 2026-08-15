@@ -14,4 +14,8 @@ function purgeCutoff(now = new Date()) {
   return new Date(nowTime - RETENTION_MS).toISOString()
 }
 
-module.exports = { RETENTION_DAYS, shouldPurgeRoom, purgeCutoff }
+function isInteractiveInvocation(context) {
+  return Boolean(context && context.OPENID)
+}
+
+module.exports = { RETENTION_DAYS, shouldPurgeRoom, purgeCutoff, isInteractiveInvocation }

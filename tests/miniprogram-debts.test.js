@@ -25,4 +25,16 @@ describe('WeChat mini program debt engine', () => {
       { id: 'bad', description: 'bad', paidBy: 'unknown', amountCents: 1000, splitWith: ['xiao'] },
     ])).toEqual(simplifyMiniProgramDebts(participants, expenses))
   })
+
+  it('keeps zero-decimal currencies in whole minor units', () => {
+    const yenExpenses = [
+      { id: 'yen', description: 'yen', paidBy: 'hao', amountCents: 100, splitWith: ['xiao', 'hao', 'ax'] },
+    ]
+    const transfers = simplifyMiniProgramDebts(participants, yenExpenses, false, 1)
+    expect(transfers).toEqual([
+      { from: 'xiao', to: 'hao', amountCents: 34 },
+      { from: 'ax', to: 'hao', amountCents: 33 },
+    ])
+    expect(simplifyMiniProgramDebts(participants, yenExpenses, true, 1)).toEqual(transfers)
+  })
 })

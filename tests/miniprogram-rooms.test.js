@@ -1,11 +1,11 @@
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { parseRoomSnapshot } from '../miniprogram/lib/rooms.js'
+import { debtStateToRoomState, parseAmountMinor, parseRoomSnapshot, saveRoomCache } from '../miniprogram/lib/rooms.js'
 
 const require = createRequire(import.meta.url)
 const { createLedgerService } = require('../cloudfunctions/ledger/service.js')
-const { RETENTION_DAYS, purgeCutoff, shouldPurgeRoom } = require('../cloudfunctions/ledger_cleanup/policy.js')
+const { RETENTION_DAYS, isInteractiveInvocation, purgeCutoff, shouldPurgeRoom } = require('../cloudfunctions/ledger_cleanup/policy.js')
 
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value))
@@ -26,7 +26,12 @@ function createMemoryRepository() {
     name,
     new Map([...store].map(([key, value]) => [key, clone(value)])),
   ]))
-  const list = (draft, name, roomId) => [...draft[name].values()].filter((document) => document.roomId === roomId).map(clone)
+  const indexNames = { members: 'memberDocIds', participants: 'participantDocIds', expenses: 'expenseDocIds', invites: 'inviteIds' }
+  const list = (draft, name, roomId) => {
+    const room = draft.rooms.get(roomId)
+    const ids = room && Array.isArray(room[indexNames[name]]) ? room[indexNames[name]] : []
+    return ids.map((documentId) => draft[name].get(documentId)).filter(Boolean).map(clone)
+  }
   const get = (draft, name, documentId) => clone(draft[name].get(documentId) || null)
   const put = (draft, name, document) => draft[name].set(document._id, clone(document))
 
@@ -89,7 +94,7 @@ function sampleState() {
       { id: 'ax', name: '阿新' },
     ],
     expenses: [
-      { id: 'parking', description: '停车', paidBy: 'hao', amountCents: 8100, splitWith: ['xiao', 'hao', 'ax'] },
+      { id: 'parking', description: '停车', paidBy: 'hao', amountMinor: 8100, splitWith: ['xiao', 'hao', 'ax'] },
     ],
     currency: 'CNY',
     roundToWhole: false,
@@ -114,6 +119,7 @@ async function fixture() {
   const owner = service('owner-openid')
   const created = await owner.execute({
     action: 'room_create',
+    mutationId: 'create-room-0001',
     title: '周末旅行',
     displayName: '小浩',
     ownerParticipantId: 'hao',
@@ -128,6 +134,16 @@ async function fixture() {
   }
 }
 
+function createInvite(owner, snapshot, suffix = '0001', overrides = {}) {
+  return owner.execute({
+    action: 'room_invite',
+    roomId: snapshot.room.roomId,
+    baseRevision: snapshot.room.revision,
+    mutationId: `invite-room-${suffix}`,
+    ...overrides,
+  })
+}
+
 describe('微信共享分账房间信任边界', () => {
   it('创建时重新生成实体 ID，并且响应不泄露 OpenID', async () => {
     const { created } = await fixture()
@@ -136,6 +152,20 @@ describe('微信共享分账房间信任边界', () => {
     expect(created.snapshot.participants).toHaveLength(3)
     expect(created.snapshot.participants.some(({ participantId }) => participantId === 'hao')).toBe(false)
     expect(JSON.stringify(created)).not.toMatch(/owner-openid|openid/i)
+  })
+
+  it('创建房间在响应丢失后使用同一 mutationId 重试不会重复建房', async () => {
+    const repository = createMemoryRepository()
+    const service = createLedgerService({ repository, openid: 'owner-openid', makeToken: tokenFactory() })
+    const request = {
+      action: 'room_create', mutationId: 'stable-create-0001', title: '同一笔账', displayName: '房主',
+      ownerParticipantId: 'hao', state: sampleState(),
+    }
+    const first = await service.execute(request)
+    const replay = await service.execute(request)
+    expect(first.ok).toBe(true)
+    expect(replay).toMatchObject({ ok: true, replayed: true })
+    expect(replay.snapshot.room.roomId).toBe(first.snapshot.room.roomId)
   })
 
   it('非成员即使伪造角色、memberId 或 roomId 也无法读账单', async () => {
@@ -148,11 +178,24 @@ describe('微信共享分账房间信任边界', () => {
       openid: 'owner-openid',
     })
     expect(outsider).toEqual({ ok: false, error: 'not_member' })
+    expect(await service('outsider-openid').execute({
+      action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: 1,
+      mutationId: 'outsider-write-0001', kind: 'rename_participant',
+      payload: { participantId: created.snapshot.participants[0].participantId, name: '越权' },
+      role: 'owner', owner: true, openid: 'owner-openid',
+    })).toEqual({ ok: false, error: 'not_member' })
+  })
+
+  it('轮询携带当前 revision 时返回轻量未变化结果', async () => {
+    const { owner, created } = await fixture()
+    expect(await owner.execute({
+      action: 'room_get', roomId: created.snapshot.room.roomId, knownRevision: created.snapshot.room.revision,
+    })).toEqual({ ok: true, unchanged: true, revision: created.snapshot.room.revision })
   })
 
   it('邀请预览只返回最小信息，加入后才能看到支出', async () => {
     const { owner, created, service } = await fixture()
-    const invitation = await owner.execute({ action: 'room_invite', roomId: created.snapshot.room.roomId })
+    const invitation = await createInvite(owner, created.snapshot)
     const token = inviteToken(invitation)
     const guest = service('guest-openid')
     const preview = await guest.execute({ action: 'room_join_preview', invite: token })
@@ -180,17 +223,17 @@ describe('微信共享分账房间信任边界', () => {
 
   it('过期和撤销的邀请都无法再加入', async () => {
     const first = await fixture()
-    const invitation = await first.owner.execute({ action: 'room_invite', roomId: first.created.snapshot.room.roomId, ttlDays: 1 })
+    const invitation = await createInvite(first.owner, first.created.snapshot, 'expiry', { ttlDays: 1 })
     first.advance(25 * 60 * 60 * 1000)
     expect(await first.service('late-openid').execute({ action: 'room_join_preview', invite: inviteToken(invitation) }))
       .toEqual({ ok: false, error: 'invite_expired' })
 
     const second = await fixture()
-    const secondInvite = await second.owner.execute({ action: 'room_invite', roomId: second.created.snapshot.room.roomId })
+    const secondInvite = await createInvite(second.owner, second.created.snapshot, 'revoke')
     const revoked = await second.owner.execute({
       action: 'room_manage',
       roomId: second.created.snapshot.room.roomId,
-      baseRevision: second.created.snapshot.room.revision,
+      baseRevision: secondInvite.revision,
       mutationId: 'revoke-invite-0001',
       kind: 'revoke_invite',
       payload: { inviteId: secondInvite.inviteId },
@@ -200,9 +243,39 @@ describe('微信共享分账房间信任边界', () => {
       .toEqual({ ok: false, error: 'invite_invalid' })
   })
 
+  it('邀请令牌由服务端生成且同一 mutationId 重试返回同一链接', async () => {
+    const { owner, created } = await fixture()
+    const request = {
+      action: 'room_invite', roomId: created.snapshot.room.roomId, baseRevision: 1,
+      mutationId: 'invite-stable-0001', token: 'a'.repeat(32),
+    }
+    const first = await owner.execute(request)
+    const replay = await owner.execute(request)
+    const token = inviteToken(first)
+    expect(token).toMatch(/^[a-f0-9]{64}$/)
+    expect(token).not.toBe('a'.repeat(32))
+    expect(first.inviteId).not.toBe(token)
+    expect(replay).toMatchObject({ ok: true, replayed: true, sharePath: first.sharePath, inviteId: first.inviteId })
+  })
+
+  it('加入必须认领已有参与人或新增自己，达到次数上限后邀请失效', async () => {
+    const { owner, created, service } = await fixture()
+    const invitation = await createInvite(owner, created.snapshot, 'single-use', { maxUses: 1 })
+    const token = inviteToken(invitation)
+    expect(await service('empty-identity').execute({ action: 'room_join', invite: token, displayName: '访客' }))
+      .toEqual({ ok: false, error: 'invalid_join_choice' })
+    const preview = await service('guest-one').execute({ action: 'room_join_preview', invite: token })
+    await service('guest-one').execute({
+      action: 'room_join', invite: token, displayName: '访客一',
+      claimParticipantId: preview.preview.claimableParticipants[0].participantId,
+    })
+    expect(await service('guest-two').execute({ action: 'room_join_preview', invite: token }))
+      .toEqual({ ok: false, error: 'invite_exhausted' })
+  })
+
   it('移除成员后立即拒绝其读取和写入', async () => {
     const { owner, created, service } = await fixture()
-    const invitation = await owner.execute({ action: 'room_invite', roomId: created.snapshot.room.roomId })
+    const invitation = await createInvite(owner, created.snapshot, 'remove-member')
     const guest = service('guest-openid')
     const joined = await guest.execute({ action: 'room_join', invite: inviteToken(invitation), displayName: '朋友', newParticipantName: '朋友' })
     const removed = await owner.execute({
@@ -216,6 +289,75 @@ describe('微信共享分账房间信任边界', () => {
     expect(removed.ok).toBe(true)
     expect(await guest.execute({ action: 'room_get', roomId: created.snapshot.room.roomId }))
       .toEqual({ ok: false, error: 'membership_revoked' })
+    expect(await guest.execute({
+      action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: removed.revision,
+      mutationId: 'removed-write-0001', kind: 'set_rounding', payload: { roundToWhole: true },
+    })).toEqual({ ok: false, error: 'membership_revoked' })
+    expect(await guest.execute({
+      action: 'room_join', invite: inviteToken(invitation), displayName: '朋友',
+      claimParticipantId: joined.snapshot.self.participantId,
+    })).toEqual({ ok: false, error: 'new_invite_required' })
+    const freshInvite = await createInvite(owner, { room: { ...created.snapshot.room, revision: removed.revision } }, 'after-removal')
+    const reauthorized = await guest.execute({
+      action: 'room_join', invite: inviteToken(freshInvite), displayName: '朋友',
+      claimParticipantId: joined.snapshot.self.participantId,
+    })
+    expect(reauthorized).toMatchObject({ ok: true, alreadyJoined: false })
+  })
+
+  it('主动退出后旧邀请不能复用，但可以通过房主新邀请重新加入', async () => {
+    const { owner, created, service } = await fixture()
+    const firstInvite = await createInvite(owner, created.snapshot, 'before-leave')
+    const guest = service('leaving-openid')
+    const joined = await guest.execute({ action: 'room_join', invite: inviteToken(firstInvite), displayName: '会回来', newParticipantName: '会回来' })
+    const participantId = joined.snapshot.self.participantId
+    const left = await guest.execute({
+      action: 'room_manage', roomId: created.snapshot.room.roomId, baseRevision: joined.snapshot.room.revision,
+      mutationId: 'leave-room-000001', kind: 'leave_room', payload: {},
+    })
+    expect(left.ok).toBe(true)
+    expect(await guest.execute({
+      action: 'room_join', invite: inviteToken(firstInvite), displayName: '会回来', claimParticipantId: participantId,
+    })).toEqual({ ok: false, error: 'new_invite_required' })
+    const freshInvite = await createInvite(owner, { room: { ...created.snapshot.room, revision: left.revision } }, 'after-leave')
+    const rejoined = await guest.execute({
+      action: 'room_join', invite: inviteToken(freshInvite), displayName: '会回来', claimParticipantId: participantId,
+    })
+    expect(rejoined).toMatchObject({ ok: true, alreadyJoined: false })
+    expect(rejoined.snapshot.self.participantId).toBe(participantId)
+  })
+
+  it('普通成员可以共同编辑账单和未认领参与人，但不能伪造房主权限', async () => {
+    const { owner, created, service } = await fixture()
+    const invitation = await createInvite(owner, created.snapshot, 'editor')
+    const guest = service('editor-openid')
+    const joined = await guest.execute({ action: 'room_join', invite: inviteToken(invitation), displayName: '编辑者', newParticipantName: '编辑者' })
+    const added = await guest.execute({
+      action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: joined.snapshot.room.revision,
+      mutationId: 'editor-add-person-01', kind: 'add_participant', payload: { name: '临时参与人' },
+      role: 'owner', owner: true, openid: 'owner-openid',
+    })
+    expect(added.ok).toBe(true)
+    const removed = await guest.execute({
+      action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: added.revision,
+      mutationId: 'editor-remove-person-01', kind: 'remove_participant', payload: { participantId: added.entityId },
+    })
+    expect(removed.ok).toBe(true)
+    const participants = joined.snapshot.participants.map(({ participantId }) => participantId)
+    const expense = await guest.execute({
+      action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: removed.revision,
+      mutationId: 'editor-add-expense-01', kind: 'upsert_expense',
+      payload: { expense: { description: '成员添加', amountMinor: 1200, paidByParticipantId: participants[0], splitParticipantIds: participants } },
+    })
+    expect(expense.ok).toBe(true)
+    expect(await guest.execute({
+      action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: expense.revision,
+      mutationId: 'editor-rename-room-01', kind: 'rename_room', payload: { title: '越权修改' }, role: 'owner', owner: true,
+    })).toEqual({ ok: false, error: 'owner_required' })
+    expect(await guest.execute({
+      action: 'room_manage', roomId: created.snapshot.room.roomId, baseRevision: expense.revision,
+      mutationId: 'editor-archive-room-1', kind: 'archive_room', payload: {}, role: 'owner', owner: true,
+    })).toEqual({ ok: false, error: 'owner_required' })
   })
 })
 
@@ -232,7 +374,7 @@ describe('微信共享分账房间并发与幂等', () => {
       payload: {
         expense: {
           description: '车票',
-          amountCents: 3000,
+          amountMinor: 3000,
           paidByParticipantId: participants[0],
           splitParticipantIds: participants,
         },
@@ -244,6 +386,10 @@ describe('微信共享分账房间并发与幂等', () => {
     expect(first.ok).toBe(true)
     expect(replay).toMatchObject({ ok: true, replayed: true, revision: first.revision, entityId: first.entityId })
     expect(latest.snapshot.expenses).toHaveLength(2)
+    expect(await owner.execute({
+      ...mutation,
+      payload: { ...mutation.payload, expense: { ...mutation.payload.expense, amountMinor: 9999 } },
+    })).toEqual({ ok: false, error: 'mutation_mismatch' })
   })
 
   it('相同 baseRevision 的并发写入不会静默覆盖', async () => {
@@ -260,6 +406,20 @@ describe('微信共享分账房间并发与幂等', () => {
     expect(second).toEqual({ ok: false, error: 'revision_conflict', currentRevision: 2 })
   })
 
+  it('删除房间的响应丢失后重试仍返回幂等成功', async () => {
+    const { owner, created } = await fixture()
+    const request = {
+      action: 'room_manage', roomId: created.snapshot.room.roomId, baseRevision: 1,
+      mutationId: 'delete-room-retry-01', kind: 'delete_room', payload: {},
+    }
+    const first = await owner.execute(request)
+    const replay = await owner.execute(request)
+    expect(first).toMatchObject({ ok: true, revision: 2 })
+    expect(replay).toMatchObject({ ok: true, revision: 2, replayed: true })
+    expect(await owner.execute({ action: 'room_get', roomId: created.snapshot.room.roomId }))
+      .toEqual({ ok: false, error: 'room_not_found' })
+  })
+
   it('拒绝非法金额、未知参与人和超长输入', async () => {
     const { owner, created } = await fixture()
     const base = {
@@ -268,18 +428,76 @@ describe('微信共享分账房间并发与幂等', () => {
     }
     expect(await owner.execute({
       ...base,
-      payload: { expense: { description: '坏账', amountCents: -1, paidByParticipantId: 'missing', splitParticipantIds: ['missing'] } },
+      payload: { expense: { description: '坏账', amountMinor: -1, paidByParticipantId: 'missing', splitParticipantIds: ['missing'] } },
     })).toEqual({ ok: false, error: 'invalid_amount' })
 
     expect(await owner.execute({
       ...base,
       mutationId: 'invalid-expense-02',
-      payload: { expense: { description: 'x'.repeat(61), amountCents: 100, paidByParticipantId: 'missing', splitParticipantIds: ['missing'] } },
+      payload: { expense: { description: 'x'.repeat(61), amountMinor: 100, paidByParticipantId: 'missing', splitParticipantIds: ['missing'] } },
     })).toEqual({ ok: false, error: 'invalid_expense' })
+  })
+
+  it('拒绝非法币种、超大数组和重复分摊人', async () => {
+    const first = await fixture()
+    expect(await first.owner.execute({
+      action: 'room_create', mutationId: 'invalid-currency-01', title: '坏币种', displayName: '房主',
+      state: { ...sampleState(), currency: 'BTC' },
+    })).toEqual({ ok: false, error: 'invalid_currency' })
+    expect(await first.owner.execute({
+      action: 'room_create', mutationId: 'too-many-people-01', title: '太多人', displayName: '房主',
+      state: {
+        ...sampleState(), expenses: [],
+        participants: Array.from({ length: 31 }, (_, index) => ({ id: `p-${index}`, name: `成员${index}` })),
+      },
+    })).toEqual({ ok: false, error: 'invalid_participants' })
+    const participant = first.created.snapshot.participants[0].participantId
+    expect(await first.owner.execute({
+      action: 'room_mutate', roomId: first.created.snapshot.room.roomId, baseRevision: 1,
+      mutationId: 'duplicate-split-001', kind: 'upsert_expense',
+      payload: { expense: { description: '重复', amountMinor: 100, paidByParticipantId: participant, splitParticipantIds: [participant, participant] } },
+    })).toEqual({ ok: false, error: 'invalid_expense_participant' })
+  })
+
+  it('共享房间只允许在相同最小单位精度的币种间切换', async () => {
+    const { owner, created } = await fixture()
+    const samePrecision = await owner.execute({
+      action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: 1,
+      mutationId: 'currency-cny-usd-01', kind: 'set_currency', payload: { currency: 'USD' },
+    })
+    expect(samePrecision).toMatchObject({ ok: true, revision: 2 })
+    expect(await owner.execute({
+      action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: 2,
+      mutationId: 'currency-usd-jpy-01', kind: 'set_currency', payload: { currency: 'JPY' },
+    })).toEqual({ ok: false, error: 'currency_precision_change' })
+
+    const repository = createMemoryRepository()
+    const emptyOwner = createLedgerService({ repository, openid: 'empty-owner', makeToken: tokenFactory() })
+    const empty = await emptyOwner.execute({
+      action: 'room_create', mutationId: 'empty-room-create-01', title: '空账单', displayName: '房主',
+      state: { ...sampleState(), expenses: [] },
+    })
+    expect(await emptyOwner.execute({
+      action: 'room_mutate', roomId: empty.snapshot.room.roomId, baseRevision: 1,
+      mutationId: 'currency-empty-jpy-1', kind: 'set_currency', payload: { currency: 'JPY' },
+    })).toMatchObject({ ok: true, revision: 2 })
   })
 })
 
 describe('共享房间客户端边界', () => {
+  it('按币种最小单位解析金额并转换本地账单', () => {
+    expect(parseAmountMinor('12.34', 'CNY')).toBe(1234)
+    expect(parseAmountMinor('12.345', 'CNY')).toBeNull()
+    expect(parseAmountMinor('1200', 'JPY')).toBe(1200)
+    expect(parseAmountMinor('1200.5', 'JPY')).toBeNull()
+    const state = debtStateToRoomState({
+      participants: [{ id: 'a', name: '甲' }, { id: 'b', name: '乙' }],
+      expenses: [{ id: 'e', description: '车票', paidBy: 'a', amountCents: 120000, splitWith: ['a', 'b'] }],
+      currency: 'JPY', roundToWhole: false,
+    })
+    expect(state.expenses[0].amountMinor).toBe(1200)
+  })
+
   it('拒绝引用未知参与人的云端快照', async () => {
     const { created } = await fixture()
     const tampered = structuredClone(created.snapshot)
@@ -290,10 +508,40 @@ describe('共享房间客户端边界', () => {
   it('客户端只调用 ledger 云函数，不直接读写原始集合', () => {
     const clientSource = readFileSync(new URL('../miniprogram/lib/rooms.js', import.meta.url), 'utf8')
     const pageSource = readFileSync(new URL('../miniprogram/pages/room/room.js', import.meta.url), 'utf8')
+    const indexSource = readFileSync(new URL('../miniprogram/pages/index/index.js', import.meta.url), 'utf8')
     expect(clientSource).toMatch(/callFunction\(\{ name: 'ledger'/)
     expect(clientSource).not.toMatch(/\.database\s*\(/)
     expect(pageSource).not.toMatch(/\.database\s*\(/)
     expect(pageSource).not.toMatch(/console\.(?:log|error).*invite/i)
+    expect(pageSource).toMatch(/pendingMutationId/)
+    expect(indexSource).toMatch(/pendingRoomCreate/)
+  })
+
+  it('云环境开关控制初始化与共享入口，本地模式不主动联网', () => {
+    const configSource = readFileSync(new URL('../miniprogram/config/cloud.js', import.meta.url), 'utf8')
+    const appSource = readFileSync(new URL('../miniprogram/app.js', import.meta.url), 'utf8')
+    const indexTemplate = readFileSync(new URL('../miniprogram/pages/index/index.wxml', import.meta.url), 'utf8')
+    expect(configSource).toMatch(/SHARED_ROOMS_ENABLED\s*=\s*Boolean\(CLOUD_ENV_ID\)/)
+    expect(appSource).toMatch(/if \(CLOUD_ENV_ID && wx\.cloud\)/)
+    expect(indexTemplate).toMatch(/wx:if="\{\{sharedRoomsEnabled && hasExpenses\}\}"/)
+  })
+
+  it('本地缓存只保存脱敏快照，不保存邀请链接或令牌', async () => {
+    const { created } = await fixture()
+    const writes = []
+    const previousWx = globalThis.wx
+    globalThis.wx = {
+      getStorageSync: () => [],
+      setStorageSync: (key, value) => writes.push({ key, value }),
+    }
+    try {
+      saveRoomCache(created.snapshot)
+    } finally {
+      globalThis.wx = previousWx
+    }
+    const serialized = JSON.stringify(writes)
+    expect(serialized).not.toMatch(/sharePath|inviteToken|[?&]invite=/i)
+    expect(serialized).not.toMatch(/openid/i)
   })
 
   it('云事务适配器不使用 where 查询', () => {
@@ -312,5 +560,11 @@ describe('共享账单删除保留期', () => {
     expect(shouldPurgeRoom({ status: 'deleted', deletedAt: '2026-07-15T23:59:59.000Z' }, now)).toBe(true)
     expect(shouldPurgeRoom({ status: 'deleted', deletedAt: '2026-07-17T00:00:00.000Z' }, now)).toBe(false)
     expect(shouldPurgeRoom({ status: 'active', deletedAt: '2026-01-01T00:00:00.000Z' }, now)).toBe(false)
+  })
+
+  it('定时清理函数拒绝带微信用户身份的交互式调用', () => {
+    expect(isInteractiveInvocation({ OPENID: 'user-openid' })).toBe(true)
+    expect(isInteractiveInvocation({})).toBe(false)
+    expect(isInteractiveInvocation(null)).toBe(false)
   })
 })

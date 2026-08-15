@@ -46,7 +46,7 @@ Suggested privacy summary:
 ## First upload
 
 - Version: `1.0.0`
-- Upload description: `首个体验版：支持多人支出记录、全员或指定成员分摊、支出编辑、本地历史、多币种、自动生成精简还款方案、文字和结算图分享、浅色和深色外观。`
+- Upload description: `首个体验版：支持本地多人分账、支出编辑、本地历史、多币种、结算图分享、浅色和深色外观，以及用户主动开启的微信好友共享账单。`
 - Reviewer test path:
   1. Tap `载入示例`.
   2. Confirm that the settlement plan appears.
@@ -54,19 +54,21 @@ Suggested privacy summary:
   4. Tap `分享结算图` and confirm the portrait card is readable.
   5. Tap `保存并新建`, name the settlement, then reopen it from `历史`.
   6. Change the currency and appearance from the compact controls at the top of the main screen.
+  7. With CloudBase enabled, tap `创建共享账单`; confirm the upload notice, create the room, and generate an invitation.
+  8. Open the invitation with a second WeChat account; before joining it must show only the room name, currency, participant count, and claim choices. After joining it may show the full ledger.
 
 ## Release commands
 
 ```bash
 # Bind the registered mini program. Add --cloud-env after creating CloudBase.
-npm run mini:configure -- --appid wx1234567890abcdef
+npm run mini:configure -- --appid wx7413688ef0714f4a
 
 # Confirm that the real account exposes a CloudBase environment.
 npm run mini:cloud:list
 
 # Bind the selected environment locally. Shared-room deployment requires the
 # private collections and indexes in docs/wechat-shared-room-runbook.md.
-npm run mini:configure -- --appid wx1234567890abcdef --cloud-env cloud1-example
+npm run mini:configure -- --appid wx7413688ef0714f4a --cloud-env cloud1-example
 npm run mini:cloud:deploy:health -- --env cloud1-example
 npm run mini:cloud:deploy:ledger -- --env cloud1-example
 npm run mini:cloud:deploy:cleanup -- --env cloud1-example

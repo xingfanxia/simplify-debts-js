@@ -21,14 +21,16 @@
 
 | 集合 | 关键字段 | 用途 |
 |---|---|---|
-| `ledger_rooms` | `_id`, `title`, `currency`, `ownerMemberId`, `revision`, `status`, `createdAt`, `updatedAt` | 房间元数据与并发版本 |
+| `ledger_rooms` | `_id`, `title`, `currency`, `ownerMemberId`, `revision`, `status`, `memberDocIds`, `participantDocIds`, `expenseDocIds`, `inviteIds` | 房间元数据、并发版本与事务内文档索引 |
 | `ledger_members` | `roomId`, `memberId`, `openid`, `displayName`, `role`, `participantId`, `joinedAt`, `revokedAt` | 微信身份、房间权限和参与人认领关系 |
 | `ledger_participants` | `roomId`, `participantId`, `name`, `claimedByMemberId`, `createdAt` | 实际参与分账的人，包括未注册访客 |
-| `ledger_expenses` | `roomId`, `expenseId`, `description`, `amountMinor`, `paidByParticipantId`, `splitParticipantIds`, `createdByMemberId`, `updatedAt`, `deletedAt` | 支出事实；金额继续用最小货币单位整数 |
+| `ledger_expenses` | `roomId`, `expenseId`, `description`, `amountMinor`, `paidByParticipantId`, `splitParticipantIds`, `createdByMemberId`, `updatedAt`, `deletedAt` | 支出事实；金额按币种最小单位保存（如分、日元、韩元） |
 | `ledger_invites` | `tokenHash`, `roomId`, `createdByMemberId`, `expiresAt`, `maxUses`, `usedCount`, `revokedAt` | 可撤销、可过期的邀请能力 |
 | `ledger_mutations` | `roomId`, `mutationId`, `memberId`, `kind`, `createdAt` | 写入重试的幂等记录，可按保留期清理 |
 
 OpenID 只存在于服务端成员文档中，不返回客户端；客户端看到的是随机 `memberId`。邀请链接只携带高熵 token，不把 `roomId` 当成授权凭证。
+
+共享房间已有支出时只展示相同小数精度的币种选项：两位小数币种之间可直接切换，JPY/KRW 两个整数币种之间可切换；删除全部支出后可跨组选择。服务端同样拒绝对已有支出做跨精度重解释，避免把 `12.34` 元静默变成 `1234` 日元。用户也可以在创建共享账单前从本地首页选择任意支持币种。
 
 ## 页面与用户流程
 
@@ -43,21 +45,22 @@ OpenID 只存在于服务端成员文档中，不返回客户端；客户端看�
 
 ## 同步与并发
 
-- 第一版采用“打开页面立即拉取 + 前台每 2–3 秒轮询 + `onShow` 强制刷新”。这与参考项目后来采用的脱敏 `room_get` 通道一致，稳定且不会为了实时性开放原始集合。
-- 每次写入带 `baseRevision` 和客户端生成的 `mutationId`。版本落后时返回 `revision_conflict` 与最新快照，客户端提示用户刷新后重试；同一 `mutationId` 重放时返回第一次结果。
+- 第一版采用“打开页面立即拉取 + 前台每 2–3 秒轮询 + `onShow` 强制刷新”。轮询携带客户端已知 revision；未变化时服务端只验证房间和成员权限并返回轻量结果，变化时才读取完整快照。这样保持 3 秒内同步与移除生效，同时避免反复读取全部支出。
+- 版本化写入带 `baseRevision` 和客户端生成的稳定 `mutationId`。版本落后时返回 `revision_conflict`，客户端立即拉取最新快照；同一逻辑操作在弱网重试时复用原 `mutationId`，服务端返回第一次结果。建房也使用 `mutationId`；加入房间由 `(roomId, OPENID)` 唯一成员键天然幂等。
 - 创建成员、消费邀请次数以及账单写入涉及多文档时使用服务端事务。CloudBase 官方文档说明事务只支持服务端 SDK，并提供 ACID 保证。
 - 第二阶段如果确实需要即时更新，可增加不含 OpenID 的 `ledger_room_views` 投影集合，并用成员文档 + 自定义安全规则控制 `watch()` 读取；不要直接 watch 原始成员或邀请集合。官方文档说明实时监听仍受集合读权限约束。
 - 第一版离线时只展示最近一次缓存快照并标注“离线”；不接受离线编辑，避免静默覆盖他人的修改。
 
 实现使用单个 `ledger` 云函数作为经过验证的动作路由，提供上述七种等价能力。这样输入校验、身份提取、错误协议和权限检查只有一个事实源，不需要在七份云函数中复制安全逻辑。
 
-CloudBase 事务当前最多 100 次操作，并且事务内只支持 `doc`、不支持 `where`。因此 `ledger_rooms` 文档维护成员、参与人、支出和邀请文档 ID 索引；写事务只按文档 ID 读取。普通 `room_get` 在事务外按 `roomId` 查询脱敏快照，并用读取前后的 `revision` 再确认一致性。
+CloudBase 事务当前最多 100 次操作，并且事务内只支持 `doc`、不支持 `where`。因此 `ledger_rooms` 文档维护当前有效成员、参与人、支出和邀请的文档 ID 索引；事务和 `room_get` 都按这些 ID 读取。软删除或撤销时同步移出活动索引，避免长期使用后突破事务操作上限；被移出的文档仍保留给房间级清理任务。`room_get` 在读取前后重新读取 `revision`，发现变化即重试，避免拼接出跨版本快照。
 
 ## 权限与隐私检查点
 
 - 所有 read/write 云函数都从 `cloud.getWXContext().OPENID` 获取调用者身份；不信任客户端传入的 openid、memberId、role 或 owner 标记。
 - 每个读写入口都先查询有效 membership；被移除的成员下一次请求立即失去访问权。
-- 邀请 token 至少 128 bit 随机，只存 hash，默认 7 天过期，可撤销并限制使用次数/房间人数。
+- 退出或被移除会撤销当前成员资格，并禁止用旧邀请重新加入；只有房主在撤销发生后新生成的邀请才能重新授权该微信账号。
+- 邀请 token 为服务端派生的 256-bit 高熵值，数据库只存二次哈希；默认 7 天过期，可撤销并限制使用次数/房间人数。同一邀请 mutation 重放时可重新派生同一路径，但原文不写入数据库或日志。
 - 非成员拿到 roomId、expenseId 或旧缓存都不能从云端读取；邀请预览不含参与人余额和支出明细。
 - 房主删除房间需要二次确认；服务端软删除后进入短期恢复窗，再异步清理相关集合。
 - 当前恢复窗为 30 天。`ledger_cleanup` 只按服务端时间清理已软删除满 30 天的房间，并在依赖文档全部删除后才删除房间文档。

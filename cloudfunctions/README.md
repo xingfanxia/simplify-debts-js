@@ -14,8 +14,8 @@ and ordinary local ledgers are never uploaded.
   `cloud.getWXContext()`, validates every request, enforces room membership, and
   performs writes with server-side transactions.
 - `ledger_cleanup`: scheduled retention worker. It permanently purges rooms 30
-  days after an owner soft-deletes them. Do not expose it through an HTTP
-  trigger.
+  days after an owner soft-deletes them. It rejects invocations carrying a mini
+  program `OPENID`; do not expose it through an HTTP trigger.
 
 The mini program must never directly read or write the six `ledger_*`
 collections. Keep every collection set to **仅管理端可读写**.

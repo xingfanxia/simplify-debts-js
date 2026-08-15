@@ -19,9 +19,10 @@
 - 共享账单：用户主动点击“创建共享账单”后，客户端调用 `ledger` 云函数。
 - 身份：云函数只使用 `cloud.getWXContext().OPENID`，不接受客户端声明的 OpenID、角色或房主身份。
 - 数据访问：所有 `ledger_*` 集合均设置为“仅管理端可读写”；客户端只调用云函数。
-- 同步：页面打开立即拉取、`onShow` 拉取、前台每 2.5 秒轮询；离线只读本地缓存。
-- 并发：每次写入包含 `baseRevision` 和 `mutationId`；服务端事务处理版本冲突与幂等重放。
+- 同步：页面打开立即拉取、`onShow` 拉取、前台每 2.5 秒轮询；revision 未变化时走轻量权限检查，变化时才取完整快照；离线只读本地缓存。
+- 并发：版本化写入包含 `baseRevision` 和稳定 `mutationId`；建房也带 `mutationId`，加入由微信身份唯一键天然幂等。服务端事务处理版本冲突与弱网重放。
 - 删除：房主删除先软删除，立即阻止成员访问；30 天后由 `ledger_cleanup` 永久清理。
+- 金额：云端按币种最小单位保存；共享房间有支出时只允许在相同小数精度的币种组内切换，删除全部支出后或创建共享账单前可跨组选择。
 
 ## 创建资源
 
@@ -39,9 +40,9 @@
 | 集合 | 索引字段 | 用途 |
 |---|---|---|
 | `ledger_rooms` | `status, deletedAt` | 找到超过恢复窗的软删除房间 |
-| `ledger_members` | `roomId` | 读取脱敏成员列表 |
-| `ledger_participants` | `roomId` | 读取房间参与人 |
-| `ledger_expenses` | `roomId` | 读取房间支出 |
+| `ledger_members` | `roomId` | 删除房间时清理成员 |
+| `ledger_participants` | `roomId` | 删除房间时清理参与人 |
+| `ledger_expenses` | `roomId` | 删除房间时清理支出 |
 | `ledger_invites` | `roomId` | 清理房间邀请 |
 | `ledger_mutations` | `roomId` | 删除房间时清理幂等记录 |
 
@@ -85,6 +86,7 @@ npm run mini:cloud:deploy:cleanup -- --env <environment-id>
 
 - `ledger` 只允许小程序调用，不配置 HTTP 触发器；
 - `ledger_cleanup` 不配置 HTTP 触发器，配置每天一次的定时触发；
+- `ledger_cleanup` 会拒绝带 `OPENID` 的小程序交互调用，只允许无用户身份的定时任务执行；
 - 两个函数使用当前部署环境，不写固定密钥；
 - 日志不得记录完整 event、OpenID、邀请 token 或账单内容；
 - 为调用次数、数据库读写和存储设置预算告警。
@@ -99,6 +101,7 @@ npm run mini:cloud:deploy:cleanup -- --env <environment-id>
 - 这些信息只用于向已加入成员同步账单和计算结算方案；
 - 邀请链接默认 7 天过期，可撤销并限制使用次数；云端只保存邀请 token 的哈希；
 - 房主可以删除共享账单，成员可以退出；软删除后立即停止访问，30 天后永久清理；
+- 退出或被移除后，旧邀请不能恢复访问；房主后续新生成的邀请可重新授权；
 - 不收集联系人、精确位置、麦克风、健康、支付或广告标识；
 - 不使用广告 SDK；第三方 SDK 仅为微信 CloudBase 官方运行时；
 - 用户通过平台配置的开发者联系方式申请查询、更正或删除相关数据。
@@ -117,12 +120,13 @@ npm run mini:cloud:deploy:cleanup -- --env <environment-id>
 4. B 认领已有参与人后加入，随后能看到完整账单。
 5. A、B 分别新增、编辑、删除支出；另一端应在 3 秒内刷新。
 6. 快速重复点击同一提交，不得产生重复支出。
-7. 两端同时基于旧版本编辑时，一端得到刷新提示，不能静默覆盖。
-8. A 移除 B；B 下一次请求或 3 秒内失去读写权限。
-9. 验证撤销、过期和达到次数上限的邀请不能加入。
-10. 断网后只显示“离线，只读”，不得接受编辑。
-11. 用开发者工具尝试 `wx.cloud.database().collection('ledger_rooms').get()`，必须被权限拒绝。
-12. 检查云函数响应和日志：不得出现 OpenID、AppSecret、私钥或完整账单事件；`room_invite` 的分享路径是唯一需要短暂返回邀请 token 的响应，token 不得写入日志或本地持久化。
+7. 模拟请求已经提交但响应丢失，再点一次同一操作；客户端必须复用 mutationId，建房、邀请和支出都不得重复。
+8. 两端同时基于旧版本编辑时，一端得到刷新提示，不能静默覆盖。
+9. A 移除 B；B 下一次请求或 3 秒内失去读写权限。
+10. 验证撤销、过期和达到次数上限的邀请不能加入。
+11. 断网后只显示“离线，只读”，不得接受编辑。
+12. 用开发者工具尝试 `wx.cloud.database().collection('ledger_rooms').get()`，必须被权限拒绝。
+13. 检查云函数响应和日志：不得出现 OpenID、AppSecret、私钥或完整账单事件；`room_invite` 的分享路径是唯一需要短暂返回邀请 token 的响应，token 不得写入日志或本地持久化。
 
 ## 回滚
 

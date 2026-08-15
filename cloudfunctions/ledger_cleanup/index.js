@@ -1,5 +1,5 @@
 const cloud = require('wx-server-sdk')
-const { purgeCutoff, shouldPurgeRoom } = require('./policy')
+const { isInteractiveInvocation, purgeCutoff, shouldPurgeRoom } = require('./policy')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
@@ -26,6 +26,7 @@ async function purgeCollection(database, collectionName, roomId) {
 }
 
 exports.main = async () => {
+  if (isInteractiveInvocation(cloud.getWXContext())) return { ok: false, error: 'forbidden' }
   const database = cloud.database()
   const command = database.command
   const now = new Date()

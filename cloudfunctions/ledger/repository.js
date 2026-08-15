@@ -26,11 +26,6 @@ async function getDocument(transaction, collectionName, documentId) {
   }
 }
 
-async function listDocuments(transaction, collectionName, roomId) {
-  const result = await transaction.collection(collectionName).where({ roomId }).limit(100).get()
-  return Array.isArray(result && result.data) ? result.data : []
-}
-
 async function listDocumentsById(transaction, collectionName, documentIds) {
   const documents = []
   for (const documentId of documentIds) {
@@ -81,14 +76,26 @@ function transactionAdapter(transaction) {
 }
 
 function readAdapter(database) {
+  const indexedRoomCache = new Map()
+  async function getIndexedRoom(roomId) {
+    if (indexedRoomCache.has(roomId)) return indexedRoomCache.get(roomId)
+    const room = await getDocument(database, COLLECTIONS.rooms, roomId)
+    if (room) indexedRoomCache.set(roomId, room)
+    return room
+  }
+  async function listIndexed(roomId, collectionName, indexName) {
+    const room = await getIndexedRoom(roomId)
+    const documentIds = room && Array.isArray(room[indexName]) ? room[indexName] : []
+    return listDocumentsById(database, collectionName, documentIds)
+  }
   return {
     getRoom: (roomId) => getDocument(database, COLLECTIONS.rooms, roomId),
     getMember: (documentId) => getDocument(database, COLLECTIONS.members, documentId),
-    listMembers: (roomId) => listDocuments(database, COLLECTIONS.members, roomId),
-    listParticipants: (roomId) => listDocuments(database, COLLECTIONS.participants, roomId),
-    listExpenses: (roomId) => listDocuments(database, COLLECTIONS.expenses, roomId),
+    listMembers: (roomId) => listIndexed(roomId, COLLECTIONS.members, 'memberDocIds'),
+    listParticipants: (roomId) => listIndexed(roomId, COLLECTIONS.participants, 'participantDocIds'),
+    listExpenses: (roomId) => listIndexed(roomId, COLLECTIONS.expenses, 'expenseDocIds'),
     getInvite: (documentId) => getDocument(database, COLLECTIONS.invites, documentId),
-    listInvites: (roomId) => listDocuments(database, COLLECTIONS.invites, roomId),
+    listInvites: (roomId) => listIndexed(roomId, COLLECTIONS.invites, 'inviteIds'),
   }
 }
 

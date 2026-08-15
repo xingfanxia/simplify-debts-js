@@ -69,7 +69,7 @@ export function simplifyBalances(balances) {
   return transfers
 }
 
-export function simplifyDebts(participants, expenses, roundToWhole = false) {
+export function simplifyDebts(participants, expenses, roundToWhole = false, wholeUnit = 100) {
   const balances = calculateBalances(participants, expenses)
-  return simplifyBalances(roundToWhole ? roundBalancesToWholeUnits(balances) : balances)
+  return simplifyBalances(roundToWhole ? roundBalancesToWholeUnits(balances, wholeUnit) : balances)
 }

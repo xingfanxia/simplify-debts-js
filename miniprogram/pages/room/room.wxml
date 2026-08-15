@@ -68,7 +68,7 @@
           <view class="participant-chip" wx:for="{{participantsView}}" wx:key="participantId">
             <view class="avatar {{item.avatarClass}}">{{item.initials}}</view>
             <view class="participant-copy"><text>{{item.name}}</text><text>{{item.isClaimed ? '已认领' : '未认领'}}</text></view>
-            <view class="participant-actions" wx:if="{{!readOnly}}"><button data-id="{{item.participantId}}" bindtap="renameParticipant">✎</button><button wx:if="{{item.canRemove}}" class="danger-text" data-id="{{item.participantId}}" bindtap="removeParticipant">×</button></view>
+            <view class="participant-actions" wx:if="{{!readOnly}}"><button data-id="{{item.participantId}}" bindtap="renameParticipant">编辑</button><button wx:if="{{item.canRemove}}" class="danger-text" data-id="{{item.participantId}}" bindtap="removeParticipant">删除</button></view>
           </view>
         </view>
         <view class="inline-form" wx:if="{{!readOnly}}">
@@ -113,7 +113,7 @@
         <view class="settlement-empty" wx:if="{{!expensesView.length}}">添加支出后，这里会显示还款路径。</view>
         <view class="settlement-empty" wx:elif="{{!transfersView.length}}">✓ 当前已经结清</view>
         <view class="transfer-list" wx:else>
-          <view class="transfer-row" wx:for="{{transfersView}}" wx:key="key"><text>{{item.fromName}}</text><view class="arrow">→</view><text>{{item.toName}}</text><text>{{item.amountText}}</text></view>
+          <view class="transfer-row" wx:for="{{transfersView}}" wx:key="key"><text class="transfer-name">{{item.fromName}}</text><view class="arrow">→</view><text class="transfer-name transfer-name-right">{{item.toName}}</text><text class="transfer-money">{{item.amountText}}</text></view>
         </view>
         <view class="rounding-row"><view><text>整数还款</text><text>取整的同时保持总额平衡。</text></view><switch checked="{{snapshot.room.roundToWhole}}" disabled="{{readOnly}}" color="#24724d" bindchange="toggleRounding" /></view>
       </view>

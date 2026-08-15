@@ -1,6 +1,6 @@
 import { simplifyDebts } from '../../lib/debts'
 import { detectCurrency, getMessages, translate } from '../../lib/i18n'
-import { callLedger, getCachedRooms, saveRoomCache, sharedRoomsAvailable } from '../../lib/rooms'
+import { callLedger, debtStateToRoomState, getCachedRooms, isZeroDecimalCurrency, makeMutationId, parseAmountMinor, saveRoomCache, sharedRoomsAvailable } from '../../lib/rooms'
 import {
   createHistoryEntry,
   CURRENCIES,
@@ -18,7 +18,6 @@ const SYMBOLS = {
   USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩',
   MXN: 'MX$', BRL: 'R$', TWD: 'NT$', INR: '₹', HKD: 'HK$',
 }
-const NO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW'])
 const AVATAR_CLASSES = ['avatar-coral', 'avatar-mint', 'avatar-blue', 'avatar-purple', 'avatar-accent']
 const CURRENCY_NAMES = {
   USD: '美元', EUR: '欧元', GBP: '英镑', CAD: '加拿大元', AUD: '澳大利亚元', CNY: '人民币', JPY: '日元', KRW: '韩元',
@@ -49,7 +48,7 @@ function avatarClass(name) {
 
 function formatMoney(amountCents, currency) {
   const amount = amountCents / 100
-  const digits = NO_DECIMAL_CURRENCIES.has(currency) ? 0 : 2
+  const digits = isZeroDecimalCurrency(currency) ? 0 : 2
   const value = amount.toFixed(digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   return `${SYMBOLS[currency] || `${currency} `}${value}`
 }
@@ -69,6 +68,18 @@ function defaultExpenseForm() {
   }
 }
 
+function normalizeCurrencyPrecision(state, currency) {
+  if (!isZeroDecimalCurrency(currency)) return { ...state, currency }
+  return {
+    ...state,
+    currency,
+    expenses: state.expenses.map((expense) => ({
+      ...expense,
+      amountCents: Math.max(100, Math.round(expense.amountCents / 100) * 100),
+    })),
+  }
+}
+
 function sharedRoomError(error) {
   const messages = {
     cloud_unavailable: '共享功能尚未连接云环境。',
@@ -76,6 +87,7 @@ function sharedRoomError(error) {
     invalid_state: '当前账单无法共享，请检查参与人和支出。',
     invalid_participants: '共享账单需要 2–30 位参与人。',
     invalid_expenses: '单个共享账单最多支持 60 笔支出。',
+    invalid_amount_precision: '当前币种只支持整数金额，请先检查支出。',
     duplicate_participant: '参与人姓名不能重复。',
   }
   return messages[error && error.code] || '创建共享账单失败，请稍后重试。'
@@ -83,7 +95,7 @@ function sharedRoomError(error) {
 
 function localizedExample(language, currency, roundToWhole) {
   const t = (key) => translate(language, key)
-  return {
+  const state = {
     participants: [
       { id: 'alex', name: 'Alex' }, { id: 'maya', name: 'Maya' },
       { id: 'theo', name: 'Theo' }, { id: 'jules', name: 'Jules' },
@@ -96,6 +108,7 @@ function localizedExample(language, currency, roundToWhole) {
     currency,
     roundToWhole,
   }
+  return normalizeCurrencyPrecision(state, currency)
 }
 
 Page({
@@ -167,11 +180,11 @@ Page({
     const language = 'zh-Hans'
     const t = getMessages()
     const theme = resolveTheme(preferences.theme)
-    const state = getCurrentState()
+    let state = getCurrentState()
     const currency = preferences.currency === 'auto' ? detectCurrency() : preferences.currency
     const currencyValues = ['auto', ...CURRENCIES]
     const themeIndex = Math.max(0, THEME_OPTIONS.findIndex(({ value }) => value === preferences.theme))
-    state.currency = currency
+    state = normalizeCurrencyPrecision(state, currency)
     saveCurrentState(state)
     getApp().globalData.theme = theme
     getApp().applyNavigationTheme(theme)
@@ -348,14 +361,14 @@ Page({
   submitExpense() {
     const participants = this.data.state.participants
     const form = this.data.expenseForm
-    const amount = Number(form.amount)
-    const amountCents = Math.round(amount * 100)
+    const amountMinor = parseAmountMinor(form.amount, this.data.state.currency)
+    const amountCents = amountMinor ? amountMinor * (isZeroDecimalCurrency(this.data.state.currency) ? 100 : 1) : 0
     const paidBy = form.paidBy || participants[0]?.id || ''
     const splitWith = form.splitMode === 'everyone' ? participants.map(({ id }) => id) : form.selectedIds
     let error = ''
     if (participants.length < 2) error = this.data.t.addTwoPeopleError
     else if (!paidBy) error = this.data.t.choosePayerError
-    else if (!Number.isFinite(amount) || !Number.isSafeInteger(amountCents) || amountCents <= 0) error = this.data.t.validAmountError
+    else if (!Number.isSafeInteger(amountCents) || amountCents <= 0) error = isZeroDecimalCurrency(this.data.state.currency) ? this.data.t.wholeAmountError : this.data.t.validAmountError
     else if (splitWith.length === 0) error = this.data.t.chooseShareError
     if (error) {
       this.setData({ formError: error })
@@ -384,7 +397,7 @@ Page({
       editingExpenseId: expense.id,
       expenseForm: {
         description: expense.description,
-        amount: (expense.amountCents / 100).toFixed(2),
+        amount: (expense.amountCents / 100).toFixed(isZeroDecimalCurrency(this.data.state.currency) ? 0 : 2),
         paidBy: expense.paidBy,
         splitMode: everyone ? 'everyone' : 'custom',
         selectedIds: [...expense.splitWith],
@@ -413,7 +426,7 @@ Page({
   onCurrencyChange(event) {
     const value = this.data.currencyValues[Number(event.detail.value)] || 'auto'
     savePreferences({ currency: value })
-    const state = { ...this.data.state, currency: value === 'auto' ? detectCurrency() : value }
+    const state = normalizeCurrencyPrecision(this.data.state, value === 'auto' ? detectCurrency() : value)
     saveCurrentState(state)
     this.refreshFromStorage()
   },
@@ -530,18 +543,34 @@ Page({
       return
     }
     const ownerParticipant = this.data.state.participants[this.data.shareOwnerIndex - 1]
-    this.setData({ creatingSharedRoom: true })
+    let request
     try {
-      const result = await callLedger('room_create', {
+      request = {
         title,
         displayName,
         ownerParticipantId: ownerParticipant?.id || '',
-        state: this.data.state,
+        state: debtStateToRoomState(this.data.state),
+      }
+    } catch (error) {
+      wx.showToast({ title: sharedRoomError(error), icon: 'none', duration: 2800 })
+      return
+    }
+    const fingerprint = JSON.stringify(request)
+    if (!this.pendingRoomCreate || this.pendingRoomCreate.fingerprint !== fingerprint) {
+      this.pendingRoomCreate = { fingerprint, mutationId: makeMutationId('room-create') }
+    }
+    this.setData({ creatingSharedRoom: true })
+    try {
+      const result = await callLedger('room_create', {
+        ...request,
+        mutationId: this.pendingRoomCreate.mutationId,
       })
+      this.pendingRoomCreate = null
       const snapshot = saveRoomCache(result.snapshot)
       this.setData({ creatingSharedRoom: false, showShareRoomDialog: false })
       wx.navigateTo({ url: `/pages/room/room?roomId=${encodeURIComponent(snapshot.room.roomId)}` })
     } catch (error) {
+      if (!['network_error', 'empty_response'].includes(error.code)) this.pendingRoomCreate = null
       this.setData({ creatingSharedRoom: false })
       wx.showToast({ title: sharedRoomError(error), icon: 'none', duration: 2800 })
     }

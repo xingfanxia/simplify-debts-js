@@ -1,8 +1,10 @@
 import { CLOUD_ENV_ID, SHARED_ROOMS_ENABLED } from '../config/cloud'
+import { CURRENCIES } from './storage'
 
 const ROOM_CACHE_PREFIX = 'settle-shared-room-cache-v1:'
 const ACTIVE_ROOM_IDS_KEY = 'settle-shared-room-ids-v1'
 const MAX_CACHED_ROOMS = 12
+const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW'])
 
 export class RoomError extends Error {
   constructor(code, details = {}) {
@@ -20,6 +22,54 @@ function isRecord(value) {
 function cleanString(value, maxLength = 100) {
   const text = typeof value === 'string' ? value.trim() : ''
   return text && [...text].length <= maxLength ? text : ''
+}
+
+export function isZeroDecimalCurrency(currency) {
+  return ZERO_DECIMAL_CURRENCIES.has(currency)
+}
+
+export function minorUnitFactor(currency) {
+  return isZeroDecimalCurrency(currency) ? 1 : 100
+}
+
+export function parseAmountMinor(value, currency) {
+  const text = typeof value === 'string' ? value.trim() : String(value ?? '').trim()
+  const decimals = minorUnitFactor(currency) === 1 ? 0 : 2
+  const pattern = decimals === 0 ? /^\d+$/ : /^\d+(?:\.\d{1,2})?$/
+  if (!pattern.test(text)) return null
+  const [wholeText, fractionText = ''] = text.split('.')
+  const factor = minorUnitFactor(currency)
+  const amountMinor = Number(wholeText) * factor + Number(fractionText.padEnd(decimals, '0') || 0)
+  return Number.isSafeInteger(amountMinor) && amountMinor > 0 ? amountMinor : null
+}
+
+export function localAmountCentsToMinor(amountCents, currency) {
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0) return null
+  if (minorUnitFactor(currency) === 1) return amountCents % 100 === 0 ? amountCents / 100 : null
+  return amountCents
+}
+
+export function debtStateToRoomState(state) {
+  if (!isRecord(state) || !CURRENCIES.includes(state.currency) || !Array.isArray(state.participants) || !Array.isArray(state.expenses)) {
+    throw new RoomError('invalid_state')
+  }
+  const expenses = state.expenses.map((expense) => {
+    const amountMinor = localAmountCentsToMinor(expense.amountCents, state.currency)
+    if (!amountMinor) throw new RoomError('invalid_amount_precision')
+    return {
+      id: expense.id,
+      description: expense.description,
+      paidBy: expense.paidBy,
+      amountMinor,
+      splitWith: [...expense.splitWith],
+    }
+  })
+  return {
+    participants: state.participants.map(({ id, name }) => ({ id, name })),
+    expenses,
+    currency: state.currency,
+    roundToWhole: state.roundToWhole === true,
+  }
 }
 
 export function sharedRoomsAvailable() {
@@ -59,11 +109,12 @@ function validExpense(value, participantIds) {
   return isRecord(value)
     && Boolean(cleanString(value.expenseId, 80))
     && Boolean(cleanString(value.description, 60))
-    && Number.isSafeInteger(value.amountCents)
-    && value.amountCents > 0
+    && Number.isSafeInteger(value.amountMinor)
+    && value.amountMinor > 0
     && participantIds.has(value.paidByParticipantId)
     && Array.isArray(value.splitParticipantIds)
     && value.splitParticipantIds.length > 0
+    && new Set(value.splitParticipantIds).size === value.splitParticipantIds.length
     && value.splitParticipantIds.every((participantId) => participantIds.has(participantId))
 }
 
@@ -72,7 +123,7 @@ export function parseRoomSnapshot(value) {
   const roomId = cleanString(value.room.roomId, 80)
   const title = cleanString(value.room.title, 60)
   const currency = cleanString(value.room.currency, 8)
-  if (!roomId || !title || !currency || !Number.isSafeInteger(value.room.revision) || value.room.revision < 1) return null
+  if (!roomId || !title || !CURRENCIES.includes(currency) || !Number.isSafeInteger(value.room.revision) || value.room.revision < 1) return null
   if (!['active', 'archived'].includes(value.room.status)) return null
   if (!Array.isArray(value.participants) || !Array.isArray(value.expenses) || !Array.isArray(value.members)) return null
   const participants = value.participants.filter(validParticipant).map((participant) => ({
@@ -86,24 +137,36 @@ export function parseRoomSnapshot(value) {
   const expenses = value.expenses.filter((expense) => validExpense(expense, participantIds)).map((expense) => ({
     expenseId: expense.expenseId,
     description: expense.description.trim(),
-    amountCents: expense.amountCents,
+    amountMinor: expense.amountMinor,
     paidByParticipantId: expense.paidByParticipantId,
     splitParticipantIds: [...new Set(expense.splitParticipantIds)],
     createdByMemberId: cleanString(expense.createdByMemberId, 80),
     updatedAt: cleanString(expense.updatedAt, 40),
   }))
   if (expenses.length !== value.expenses.length) return null
-  const members = value.members.map((member) => ({
-    memberId: cleanString(member && member.memberId, 80),
-    displayName: cleanString(member && member.displayName, 28),
-    role: member && member.role === 'owner' ? 'owner' : 'editor',
-    participantId: cleanString(member && member.participantId, 80),
-    joinedAt: cleanString(member && member.joinedAt, 40),
-    isSelf: member && member.isSelf === true,
-  }))
+  const members = value.members.map((member) => isRecord(member) && ['owner', 'editor'].includes(member.role) ? ({
+    memberId: cleanString(member.memberId, 80),
+    displayName: cleanString(member.displayName, 28),
+    role: member.role,
+    participantId: cleanString(member.participantId, 80),
+    joinedAt: cleanString(member.joinedAt, 40),
+    isSelf: member.isSelf === true,
+  }) : null)
+  if (members.some((member) => !member)) return null
   if (members.some((member) => !member.memberId || !member.displayName)) return null
+  const memberIds = new Set(members.map(({ memberId }) => memberId))
+  if (memberIds.size !== members.length || members.filter(({ role }) => role === 'owner').length !== 1) return null
+  if (members.some((member) => member.participantId && !participantIds.has(member.participantId))) return null
+  if (participants.some((participant) => participant.claimedByMemberId && !memberIds.has(participant.claimedByMemberId))) return null
+  if (members.some((member) => member.participantId && participants.find(({ participantId }) => participantId === member.participantId)?.claimedByMemberId !== member.memberId)) return null
+  if (participants.some((participant) => participant.claimedByMemberId && members.find(({ memberId }) => memberId === participant.claimedByMemberId)?.participantId !== participant.participantId)) return null
   const selfMemberId = cleanString(value.self.memberId, 80)
-  if (!selfMemberId || !members.some(({ memberId }) => memberId === selfMemberId)) return null
+  const selfMember = members.find(({ memberId }) => memberId === selfMemberId)
+  const selfDisplayName = cleanString(value.self.displayName, 28)
+  const selfRole = value.self.role
+  if (!selfMember || !selfDisplayName || selfMember.displayName !== selfDisplayName || selfMember.role !== selfRole) return null
+  if (members.filter(({ isSelf }) => isSelf).length !== 1 || !selfMember.isSelf) return null
+  if ((value.self.canManage === true) !== (selfRole === 'owner')) return null
 
   const invites = Array.isArray(value.invites) ? value.invites.map((invite) => ({
     inviteId: cleanString(invite && invite.inviteId, 80),
@@ -127,8 +190,8 @@ export function parseRoomSnapshot(value) {
     },
     self: {
       memberId: selfMemberId,
-      displayName: cleanString(value.self.displayName, 28),
-      role: value.self.role === 'owner' ? 'owner' : 'editor',
+      displayName: selfDisplayName,
+      role: selfRole,
       participantId: cleanString(value.self.participantId, 80),
       canManage: value.self.canManage === true,
     },
@@ -145,7 +208,7 @@ export function snapshotToDebtState(snapshot) {
     expenses: snapshot.expenses.map((expense) => ({
       id: expense.expenseId,
       description: expense.description,
-      amountCents: expense.amountCents,
+      amountCents: expense.amountMinor,
       paidBy: expense.paidByParticipantId,
       splitWith: [...expense.splitParticipantIds],
     })),

@@ -6,7 +6,10 @@ import {
   callLedger,
   clearRoomCache,
   getRoomCache,
+  isZeroDecimalCurrency,
   makeMutationId,
+  minorUnitFactor,
+  parseAmountMinor,
   parseRoomSnapshot,
   saveRoomCache,
   sharedRoomsAvailable,
@@ -14,7 +17,6 @@ import {
 } from '../../lib/rooms'
 
 const SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩', MXN: 'MX$', BRL: 'R$', TWD: 'NT$', HKD: 'HK$', INR: '₹' }
-const NO_DECIMAL = new Set(['JPY', 'KRW'])
 const AVATAR_CLASSES = ['avatar-coral', 'avatar-mint', 'avatar-blue', 'avatar-purple']
 const POLL_INTERVAL_MS = 2500
 
@@ -27,9 +29,9 @@ function avatarClass(name) {
   return AVATAR_CLASSES[total % AVATAR_CLASSES.length]
 }
 
-function formatMoney(amountCents, currency) {
-  const digits = NO_DECIMAL.has(currency) ? 0 : 2
-  const amount = (amountCents / 100).toFixed(digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+function formatMoney(amountMinor, currency) {
+  const digits = isZeroDecimalCurrency(currency) ? 0 : 2
+  const amount = (amountMinor / minorUnitFactor(currency)).toFixed(digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   return `${SYMBOLS[currency] || `${currency} `}${amount}`
 }
 
@@ -43,6 +45,10 @@ function emptyExpenseForm() {
   return { description: '', amount: '', paidBy: '', splitMode: 'everyone', selectedIds: [] }
 }
 
+function mutationFingerprint(action, kind, payload) {
+  return JSON.stringify([action, kind, payload])
+}
+
 function errorText(error) {
   const code = error && error.code ? error.code : 'unknown_error'
   const messages = {
@@ -54,10 +60,13 @@ function errorText(error) {
     invite_limit: '这个房间创建的邀请过多，请先使用已有邀请。',
     room_full: '这个共享账单的成员已满。',
     membership_revoked: '你已被移出这个共享账单。',
+    new_invite_required: '请使用退出后由房主新生成的邀请重新加入。',
     not_member: '你还不是这个共享账单的成员。',
     room_not_found: '共享账单不存在或已被删除。',
     room_not_active: '共享账单已归档，现在只能查看。',
     revision_conflict: '账单刚刚被其他成员更新，已为你刷新。',
+    mutation_mismatch: '这次重试与原操作不一致，请刷新后再试。',
+    currency_precision_change: '已有共享支出时，不能在整数币种与两位小数币种之间切换。',
     participant_unavailable: '这位参与人已被其他成员认领。',
     participant_in_use: '请先删除与这位参与人有关的支出。',
     participant_claimed: '已被成员认领的参与人不能删除。',
@@ -145,6 +154,7 @@ Page({
   onUnload() {
     this.stopPolling()
     this.inviteToken = ''
+    if (this.pendingMutations) this.pendingMutations.clear()
   },
 
   onPullDownRefresh() {
@@ -244,7 +254,14 @@ Page({
     this.fetching = true
     if (!silent && !this.data.snapshot) this.setData({ mode: 'loading' })
     try {
-      const result = await callLedger('room_get', { roomId: this.data.roomId })
+      const result = await callLedger('room_get', {
+        roomId: this.data.roomId,
+        knownRevision: this.data.snapshot?.room.revision || 0,
+      })
+      if (result.unchanged && this.data.snapshot) {
+        if (this.data.syncClass === 'offline') this.applySnapshot(this.data.snapshot)
+        return
+      }
       const snapshot = saveRoomCache(result.snapshot)
       this.applySnapshot(snapshot)
     } catch (error) {
@@ -280,19 +297,28 @@ Page({
       return
     }
     const readOnly = offline || snapshot.room.status !== 'active'
+    const currencyValues = snapshot.expenses.length
+      ? CURRENCIES.filter((currency) => minorUnitFactor(currency) === minorUnitFactor(snapshot.room.currency))
+      : CURRENCIES
+    const currentInvite = snapshot.invites.find((invite) => invite.inviteId === this.data.inviteId && invite.active)
+    const keepCurrentInvite = offline ? this.data.inviteReady : Boolean(currentInvite)
     this.setData({
       mode: 'room',
       snapshot,
       roomId: snapshot.room.roomId,
       roomTitle: snapshot.room.title,
       currency: snapshot.room.currency,
-      currencyIndex: Math.max(0, CURRENCIES.indexOf(snapshot.room.currency)),
+      currencyValues,
+      currencyIndex: Math.max(0, currencyValues.indexOf(snapshot.room.currency)),
       revisionText: `版本 ${snapshot.room.revision}`,
       syncText: offline ? '离线，只读' : snapshot.room.status === 'archived' ? '已归档' : '已同步',
       syncClass: offline ? 'offline' : snapshot.room.status === 'archived' ? 'archived' : 'synced',
       readOnly,
       canManage: snapshot.self.canManage,
-      inviteReady: offline ? this.data.inviteReady : this.data.inviteReady,
+      inviteReady: keepCurrentInvite,
+      inviteSharePath: keepCurrentInvite ? this.data.inviteSharePath : '',
+      inviteId: keepCurrentInvite ? this.data.inviteId : '',
+      inviteExpiryText: keepCurrentInvite ? this.data.inviteExpiryText : '',
     }, () => {
       wx.setNavigationBarTitle({ title: snapshot.room.title })
       this.recompute()
@@ -311,7 +337,7 @@ Page({
       avatarClass: avatarClass(participant.name),
       selected: selected.has(participant.participantId),
       isClaimed: Boolean(participant.claimedByMemberId),
-      canRemove: this.data.canManage && !participant.claimedByMemberId,
+      canRemove: !participant.claimedByMemberId,
     }))
     const expensesView = snapshot.expenses.map((expense) => {
       const payer = peopleById.get(expense.paidByParticipantId)
@@ -319,12 +345,12 @@ Page({
       return {
         ...expense,
         payerName: payer?.name || '某人',
-        amountText: formatMoney(expense.amountCents, snapshot.room.currency),
+        amountText: formatMoney(expense.amountMinor, snapshot.room.currency),
         splitText: expense.splitParticipantIds.length === snapshot.participants.length ? '全员分摊' : `${splitNames.join('、')} 分摊`,
         isEditing: expense.expenseId === this.data.editingExpenseId,
       }
     })
-    const transfersView = simplifyDebts(state.participants, state.expenses, state.roundToWhole).map((transfer, index) => {
+    const transfersView = simplifyDebts(state.participants, state.expenses, state.roundToWhole, minorUnitFactor(state.currency)).map((transfer, index) => {
       const from = peopleById.get(transfer.from)
       const to = peopleById.get(transfer.to)
       return {
@@ -355,7 +381,7 @@ Page({
       transfersView,
       membersView,
       inviteListView,
-      totalSpendText: formatMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountCents, 0), state.currency),
+      totalSpendText: formatMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0), state.currency),
       payerIndex: Math.max(0, snapshot.participants.findIndex(({ participantId }) => participantId === this.data.expenseForm.paidBy)),
     })
   },
@@ -436,11 +462,11 @@ Page({
   async submitExpense() {
     const participants = this.data.snapshot.participants
     const form = this.data.expenseForm
-    const amountCents = Math.round(Number(form.amount) * 100)
+    const amountMinor = parseAmountMinor(form.amount, this.data.currency)
     const paidByParticipantId = form.paidBy || participants[0]?.participantId || ''
     const splitParticipantIds = form.splitMode === 'everyone' ? participants.map(({ participantId }) => participantId) : form.selectedIds
     if (participants.length < 2) this.setData({ formError: '请先添加至少两位参与人。' })
-    else if (!Number.isSafeInteger(amountCents) || amountCents <= 0) this.setData({ formError: '请输入大于零的有效金额。' })
+    else if (!amountMinor) this.setData({ formError: isZeroDecimalCurrency(this.data.currency) ? '该币种只支持整数金额。' : '请输入大于零、最多两位小数的金额。' })
     else if (!paidByParticipantId) this.setData({ formError: '请选择付款人。' })
     else if (!splitParticipantIds.length) this.setData({ formError: '请至少选择一位分摊人。' })
     else {
@@ -448,7 +474,7 @@ Page({
         expense: {
           expenseId: this.data.editingExpenseId || '',
           description: form.description.trim() || '共同支出',
-          amountCents,
+          amountMinor,
           paidByParticipantId,
           splitParticipantIds,
         },
@@ -465,7 +491,7 @@ Page({
       editingExpenseId: expense.expenseId,
       expenseForm: {
         description: expense.description,
-        amount: (expense.amountCents / 100).toFixed(2),
+        amount: (expense.amountMinor / minorUnitFactor(this.data.currency)).toFixed(isZeroDecimalCurrency(this.data.currency) ? 0 : 2),
         paidBy: expense.paidByParticipantId,
         splitMode: everyone ? 'everyone' : 'custom',
         selectedIds: [...expense.splitParticipantIds],
@@ -504,18 +530,22 @@ Page({
       if (this.data.readOnly) wx.showToast({ title: '当前为只读状态', icon: 'none' })
       return false
     }
+    const fingerprint = mutationFingerprint('room_mutate', kind, payload)
+    const mutationId = this.pendingMutationId(fingerprint, prefix)
     this.setData({ mutating: true, syncText: '正在同步', syncClass: 'syncing' })
     try {
       await callLedger('room_mutate', {
         roomId: this.data.roomId,
         baseRevision: this.data.snapshot.room.revision,
-        mutationId: makeMutationId(prefix),
+        mutationId,
         kind,
         payload,
       })
+      this.clearPendingMutation(fingerprint)
       await this.loadRoom({ silent: true })
       return true
     } catch (error) {
+      if (!['network_error', 'empty_response'].includes(error.code)) this.clearPendingMutation(fingerprint)
       if (error.code === 'revision_conflict') await this.loadRoom({ silent: true })
       wx.showToast({ title: errorText(error), icon: 'none', duration: 2600 })
       return false
@@ -526,9 +556,18 @@ Page({
 
   async prepareInvite() {
     if (!this.data.canManage || this.data.readOnly || this.data.invitePreparing) return
+    const payload = { ttlDays: 7, maxUses: 20 }
+    const fingerprint = mutationFingerprint('room_invite', 'create', payload)
+    const mutationId = this.pendingMutationId(fingerprint, 'invite')
     this.setData({ invitePreparing: true })
     try {
-      const result = await callLedger('room_invite', { roomId: this.data.roomId, ttlDays: 7, maxUses: 20 })
+      const result = await callLedger('room_invite', {
+        roomId: this.data.roomId,
+        baseRevision: this.data.snapshot.room.revision,
+        mutationId,
+        ...payload,
+      })
+      this.clearPendingMutation(fingerprint)
       this.setData({
         invitePreparing: false,
         inviteReady: true,
@@ -538,7 +577,9 @@ Page({
       })
       await this.loadRoom({ silent: true })
     } catch (error) {
+      if (!['network_error', 'empty_response'].includes(error.code)) this.clearPendingMutation(fingerprint)
       this.setData({ invitePreparing: false })
+      if (error.code === 'revision_conflict') await this.loadRoom({ silent: true })
       wx.showToast({ title: errorText(error), icon: 'none' })
     }
   },
@@ -583,22 +624,25 @@ Page({
 
   deleteRoom() {
     wx.showModal({
-      title: '删除共享账单', content: '所有成员将立即失去访问权限。此操作需要后续通过云端恢复流程处理。', confirmText: '确认删除', confirmColor: '#b5443a',
+      title: '删除共享账单', content: '删除后所有成员将立即失去访问权限。云端数据保留 30 天，如需恢复请联系开发者。', confirmText: '确认删除', confirmColor: '#b5443a',
       success: ({ confirm }) => confirm && this.manage('delete_room', {}, { leaveAfter: true }),
     })
   },
 
   async manage(kind, payload, { successText = '', leaveAfter = false } = {}) {
     if (this.data.mutating) return false
+    const fingerprint = mutationFingerprint('room_manage', kind, payload)
+    const mutationId = this.pendingMutationId(fingerprint, 'manage')
     this.setData({ mutating: true, syncText: '正在同步', syncClass: 'syncing' })
     try {
       await callLedger('room_manage', {
         roomId: this.data.roomId,
         baseRevision: this.data.snapshot.room.revision,
-        mutationId: makeMutationId('manage'),
+        mutationId,
         kind,
         payload,
       })
+      this.clearPendingMutation(fingerprint)
       if (leaveAfter) {
         clearRoomCache(this.data.roomId)
         wx.showToast({ title: kind === 'delete_room' ? '共享账单已删除' : '已退出共享账单', icon: 'success' })
@@ -609,11 +653,22 @@ Page({
       }
       return true
     } catch (error) {
+      if (!['network_error', 'empty_response'].includes(error.code)) this.clearPendingMutation(fingerprint)
       if (error.code === 'revision_conflict') await this.loadRoom({ silent: true })
       wx.showToast({ title: errorText(error), icon: 'none', duration: 2600 })
       return false
     } finally {
       this.setData({ mutating: false })
     }
+  },
+
+  pendingMutationId(fingerprint, prefix) {
+    if (!this.pendingMutations) this.pendingMutations = new Map()
+    if (!this.pendingMutations.has(fingerprint)) this.pendingMutations.set(fingerprint, makeMutationId(prefix))
+    return this.pendingMutations.get(fingerprint)
+  },
+
+  clearPendingMutation(fingerprint) {
+    if (this.pendingMutations) this.pendingMutations.delete(fingerprint)
   },
 })
