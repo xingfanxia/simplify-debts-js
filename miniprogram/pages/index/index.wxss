@@ -258,9 +258,8 @@
 .direction-line { display: flex; align-items: center; justify-content: center; height: 32rpx; color: var(--primary); }
 .direction-line view { width: 30rpx; height: 3rpx; background: var(--primary); border-radius: 3rpx; }
 .direction-line text { margin-left: -4rpx; font-size: 32rpx; font-weight: 750; line-height: 24rpx; }
-.transfer-amount { display: flex; align-items: baseline; justify-content: space-between; margin-top: 14rpx; padding-top: 13rpx; border-top: 2rpx solid var(--line); }
-.transfer-amount text:first-child { color: var(--muted); font-size: 22rpx; font-weight: 650; }
-.transfer-amount text:last-child { font-size: 34rpx; font-weight: 750; }
+.transfer-amount { display: flex; align-items: baseline; justify-content: flex-end; margin-top: 14rpx; padding-top: 13rpx; border-top: 2rpx solid var(--line); }
+.transfer-amount text { font-size: 34rpx; font-weight: 750; }
 .share-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 9rpx; margin-top: 16rpx; }
 .share-button { display: flex; align-items: center; justify-content: center; width: 100%; min-width: 0; height: 84rpx; margin: 0; padding: 0 12rpx; gap: 8rpx; overflow: hidden; color: var(--ink); font-size: 26rpx; font-weight: 650; line-height: 1.2; background: var(--surface); border: 2rpx solid var(--line); border-radius: 14rpx; }
 .share-image-button { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); }

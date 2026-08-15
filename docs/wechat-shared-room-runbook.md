@@ -66,6 +66,9 @@ npm run mini:configure -- --appid wx7413688ef0714f4a --cloud-env <environment-id
 
 配置脚本只写公开 AppID 和环境 ID，不读取或写入 AppSecret。环境 ID 为空时，共享入口保持隐藏，本地账单功能不受影响。
 
+当前已授权的正式环境为 `cloud1-d3gbdocpk8fcb2e97`（上海）。仓库根目录的
+`cloudbaserc.json` 是函数类型、运行时、超时和定时触发器的配置来源；不要只依赖控制台默认值。
+
 ## 部署
 
 先运行本地门槛：
@@ -80,8 +83,14 @@ npm run build
 获得明确部署授权后：
 
 ```bash
-npm run mini:cloud:deploy:ledger -- --env <environment-id>
-npm run mini:cloud:deploy:cleanup -- --env <environment-id>
+npx --yes @cloudbase/cli@3.7.3 fn deploy ledger --force \
+  -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
+npx --yes @cloudbase/cli@3.7.3 fn deploy ledger_cleanup --force \
+  -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
+npx --yes @cloudbase/cli@3.7.3 config diff fn ledger \
+  -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
+npx --yes @cloudbase/cli@3.7.3 config diff fn ledger_cleanup \
+  -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
 ```
 
 函数设置要求：
@@ -94,6 +103,11 @@ npm run mini:cloud:deploy:cleanup -- --env <environment-id>
 - 两个函数使用当前部署环境，不写固定密钥；
 - 日志不得记录完整 event、OpenID、邀请 token 或账单内容；
 - 为调用次数、数据库读写和存储设置预算告警。
+
+`ledger` 最初创建在 `Nodejs16.13`，腾讯云不支持原地修改既有函数的
+`Runtime`，因此 `cloudbaserc.json` 记录其实际运行时，避免 CLI 报告假成功后产生配置漂移。
+`ledger_cleanup` 使用 `Nodejs20.19`。如需升级 `ledger`，必须走一次有明确回滚方案的函数重建，
+不能把普通配置更新当成已升级。
 
 `ledger_cleanup` 每次最多处理 5 个到期房间，并以最多 10 个并发删除依赖文档；超大房间若一次未清完会保留房间墓碑，由下一次定时任务继续。只有所有成员、参与人、支出、邀请和幂等记录都清理完后才删除房间文档。
 

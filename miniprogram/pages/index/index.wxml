@@ -112,7 +112,7 @@
               <view class="direction-line"><view></view><text>›</text></view>
               <view class="person-side person-side-right"><view class="avatar {{item.toClass}}">{{item.toInitials}}</view><text>{{item.toName}}</text></view>
             </view>
-            <view class="transfer-amount"><text>{{t.onePayment}}</text><text>{{item.amountText}}</text></view>
+            <view class="transfer-amount"><text>{{item.amountText}}</text></view>
           </view>
         </view>
         <view class="share-actions">

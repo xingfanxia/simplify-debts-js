@@ -68,12 +68,15 @@ npm run mini:configure -- --appid wx7413688ef0714f4a
 # Confirm that the real account exposes a CloudBase environment.
 npm run mini:cloud:list
 
-# Bind the selected environment locally. Shared-room deployment requires the
+# Bind the authorized environment locally. Shared-room deployment requires the
 # private collections and indexes in docs/wechat-shared-room-runbook.md.
-npm run mini:configure -- --appid wx7413688ef0714f4a --cloud-env cloud1-example
-npm run mini:cloud:deploy:health -- --env cloud1-example
-npm run mini:cloud:deploy:ledger -- --env cloud1-example
-npm run mini:cloud:deploy:cleanup -- --env cloud1-example
+npm run mini:configure -- --appid wx7413688ef0714f4a --cloud-env cloud1-d3gbdocpk8fcb2e97
+
+# Deploy from cloudbaserc.json and verify the effective configuration.
+npx --yes @cloudbase/cli@3.7.3 fn deploy ledger --force -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
+npx --yes @cloudbase/cli@3.7.3 fn deploy ledger_cleanup --force -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
+npx --yes @cloudbase/cli@3.7.3 config diff fn ledger -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
+npx --yes @cloudbase/cli@3.7.3 config diff fn ledger_cleanup -e cloud1-d3gbdocpk8fcb2e97 -r ap-shanghai
 
 # Build a phone preview, then upload the first experience version.
 npm run mini:preview
