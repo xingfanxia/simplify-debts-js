@@ -4,7 +4,7 @@ const messages = {
   'zh-Hans': {
     toolTitle: '分账结算', localOnly: '仅保存在这台设备', history: '历史', settings: '设置',
     whoIn: '都有谁？', whoInHelp: '逐个添加姓名，也可以粘贴逗号分隔的名单。', namesPlaceholder: '小夏、小浩、阿新…', add: '添加', tryExample: '载入示例',
-    whatPaid: '谁付了什么？', whatPaidHelp: '记下每笔共同支出，结算结果会实时更新。', whatWasIt: '这是什么支出？', descriptionPlaceholder: '晚餐、车票、民宿…', amount: '金额', paidBy: '付款人', splitBetween: '由谁分摊', everyone: '所有人', custom: '选择成员', addExpense: '添加支出', saveChanges: '保存修改', cancel: '取消',
+    whatPaid: '谁付了什么？', whatPaidHelp: '记下每笔共同支出，结算结果会实时更新。', whatWasIt: '这是什么支出？', descriptionPlaceholder: '晚餐、车票、民宿…', amount: '金额', paidBy: '付款人', splitBetween: '由谁分摊', everyone: '全员均摊', custom: '指定成员', addExpense: '添加支出', saveChanges: '保存修改', cancel: '取消',
     activity: '支出记录', expenses: '{count} 笔支出', paidSplitEveryone: '{payer} 已支付 · 全员分摊', paidSplitCustom: '{payer} 已支付 · {names} 分摊', edit: '编辑', remove: '删除',
     liveResult: '实时结果', settlementPlan: '结算方案', readyForNext: '这笔账算完了？', saveAndStartNewHelp: '存入历史记录，然后清空当前账单。', saveAndStartNew: '保存并新建', nameSettlement: '保存这笔账', nameSettlementHelp: '起一个方便日后查找的名字。', totalSpend: '总支出', repayments: '还款笔数', people: '人数', cleanSlateTitle: '先从参与人开始。', cleanSlateBody: '至少添加两个人和一笔支出，结算方案会自动出现在这里。', alreadyEvenTitle: '已经结清。', alreadyEvenBody: '现在没有人需要还款。', wholeRepayments: '整数还款', wholeRepaymentsHelp: '把最终还款取整，同时保持总额平衡。',
     share: '分享', copyText: '复制文字', shareImage: '分享结算图', shareMiniProgram: '分享小程序', settlementCopied: '结算文字已复制', generatingImage: '正在生成结算图…', imageReady: '结算图已生成',

@@ -1,7 +1,7 @@
 import { getMessages, translate } from '../../lib/i18n'
 import { avatarPresentation } from '../../lib/avatar'
 import { getCurrentState, getHistory, getPreferences, resolveTheme, saveCurrentState, saveHistory } from '../../lib/storage'
-import { formatMinorMoney, getCachedRooms } from '../../lib/rooms'
+import { formatMinorMoney, getRoomDirectory, listSharedRooms, sharedRoomsAvailable } from '../../lib/rooms'
 
 const SYMBOLS = { USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩', MXN: 'MX$', BRL: 'R$', TWD: 'NT$', HKD: 'HK$', INR: '₹' }
 
@@ -18,6 +18,20 @@ function formatDate(iso) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function sharedEntry(summary) {
+  return {
+    ...summary,
+    statusText: summary.status === 'archived' ? '已归档' : '云端同步',
+    totalText: formatMinorMoney(summary.totalMinor, summary.currency),
+    expenseText: `${summary.expenseCount} 笔支出`,
+    membersText: `${summary.memberCount} 位成员`,
+    avatars: summary.avatars.map((avatar) => ({
+      id: avatar.participantId,
+      ...avatarPresentation(avatar.avatarEmoji, `room:${summary.roomId}:${avatar.participantId}`),
+    })),
+  }
+}
+
 Page({
   data: {
     themeClass: '',
@@ -25,10 +39,14 @@ Page({
     language: 'zh-Hans',
     entries: [],
     sharedEntries: [],
+    activeTab: 'local',
+    sharedLoading: false,
+    sharedError: '',
   },
 
   onShow() {
     this.refresh()
+    this.syncSharedHistory()
   },
 
   refresh() {
@@ -46,27 +64,46 @@ Page({
         ...avatarPresentation(person.avatarEmoji, `local-ledger:${person.id}`),
       })),
     }))
-    const sharedEntries = getCachedRooms().map(({ roomId, snapshot }) => ({
-      roomId,
-      title: snapshot.room.title,
-      currency: snapshot.room.currency,
-      statusText: snapshot.room.status === 'archived' ? '已归档' : '云端同步',
-      totalText: formatMinorMoney(snapshot.expenses.reduce((sum, expense) => sum + expense.amountMinor, 0), snapshot.room.currency),
-      expenseText: `${snapshot.expenses.length} 笔支出`,
-      membersText: `${snapshot.members.length} 位成员`,
-      avatars: snapshot.participants.slice(0, 4).map((person) => ({
-        id: person.participantId,
-        ...avatarPresentation(person.avatarEmoji, `room:${roomId}:${person.participantId}`),
-      })),
-    }))
+    const sharedEntries = getRoomDirectory().map(sharedEntry)
     this.setData({
       language,
       t: getMessages(),
       themeClass: theme === 'dark' ? 'theme-dark' : '',
       entries,
       sharedEntries,
+      activeTab: !this.tabTouched && !entries.length && sharedEntries.length ? 'shared' : this.data.activeTab,
     })
     wx.setNavigationBarTitle({ title: translate(language, 'history') })
+  },
+
+  setTab(event) {
+    const tab = event.currentTarget.dataset.tab
+    if (tab === 'local' || tab === 'shared') {
+      this.tabTouched = true
+      this.setData({ activeTab: tab })
+    }
+  },
+
+  async syncSharedHistory() {
+    if (!sharedRoomsAvailable() || this.syncingSharedHistory) return
+    this.syncingSharedHistory = true
+    const requestId = (this.sharedHistoryRequestId || 0) + 1
+    this.sharedHistoryRequestId = requestId
+    this.setData({ sharedLoading: true, sharedError: '' })
+    try {
+      const rooms = await listSharedRooms()
+      if (this.sharedHistoryRequestId !== requestId) return
+      this.setData({
+        sharedEntries: rooms.map(sharedEntry),
+        sharedLoading: false,
+        activeTab: !this.tabTouched && !this.data.entries.length && rooms.length ? 'shared' : this.data.activeTab,
+      })
+    } catch (_error) {
+      if (this.sharedHistoryRequestId !== requestId) return
+      this.setData({ sharedLoading: false, sharedError: '暂时无法同步，当前显示上次保存的记录。' })
+    } finally {
+      if (this.sharedHistoryRequestId === requestId) this.syncingSharedHistory = false
+    }
   },
 
   openSharedRoom(event) {

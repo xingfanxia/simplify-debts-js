@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { simplifyDebts } from '../miniprogram/lib/debts.js'
-import { debtStateToRoomState, formatMinorMoney, parseAmountMinor, parseRoomSnapshot, reconcileExpenseDraft, saveRoomCache, snapshotToDebtState } from '../miniprogram/lib/rooms.js'
+import { debtStateToRoomState, formatMinorMoney, parseAmountMinor, parseRoomSnapshot, parseRoomSummary, reconcileExpenseDraft, saveRoomCache, snapshotToDebtState, snapshotToRoomSummary } from '../miniprogram/lib/rooms.js'
 
 const require = createRequire(import.meta.url)
 const { LIMITS, createLedgerService } = require('../cloudfunctions/ledger/service.js')
@@ -29,6 +29,9 @@ function createMemoryRepository() {
   }
   const get = (draft, name, documentId) => clone(draft[name].get(documentId) || null)
   const put = (draft, name, document) => draft[name].set(document._id, clone(document))
+  const listMembersByUser = (draft, userIndexId) => [...draft.members.values()]
+    .filter((member) => member.userIndexId === userIndexId)
+    .map(clone)
   return {
     runTransaction(work) {
       const run = tail.then(async () => {
@@ -51,6 +54,7 @@ function createMemoryRepository() {
     runRead(work) {
       return work({
         getRoom: (id) => get(stores, 'rooms', id), getMember: (id) => get(stores, 'members', id),
+        listMembersByUser: (userIndexId) => listMembersByUser(stores, userIndexId),
         listMembers: (roomId) => list(stores, 'members', roomId), listParticipants: (roomId) => list(stores, 'participants', roomId),
         listExpenses: (roomId) => list(stores, 'expenses', roomId), getInvite: (id) => get(stores, 'invites', id),
         listInvites: (roomId) => list(stores, 'invites', roomId),
@@ -257,6 +261,37 @@ describe('微信共享分账 V2 信任边界', () => {
     })).toEqual({ ok: false, error: 'not_member' })
   })
 
+  it('共享账单历史只列出当前微信身份仍有权访问的房间', async () => {
+    const { owner, created, service } = await fixture()
+    const roomId = created.snapshot.room.roomId
+    const outsider = service('outsider-openid')
+    expect(await outsider.execute({ action: 'room_list', knownRoomIds: [roomId] })).toEqual({ ok: true, rooms: [] })
+
+    const invitation = await createInvite(owner, created.snapshot, 'history-list')
+    const guest = service('history-guest-openid')
+    const joined = await joinWithProfile(guest, inviteToken(invitation), 'join-history-0001', '小夏')
+    const expense = await addExpense(guest, joined.snapshot, 'history-list')
+    const ownerList = await owner.execute({ action: 'room_list' })
+    const guestList = await guest.execute({ action: 'room_list' })
+    expect(ownerList.rooms).toHaveLength(1)
+    expect(guestList.rooms).toHaveLength(1)
+    expect(guestList.rooms[0]).toMatchObject({ roomId, title: '周末旅行', status: 'active', memberCount: 2, expenseCount: 1, totalMinor: 1200 })
+    expect(JSON.stringify(guestList)).not.toMatch(/openid|memberId|displayName/i)
+
+    await owner.execute({
+      action: 'room_manage', roomId, baseRevision: expense.revision,
+      mutationId: 'remove-history-user', kind: 'remove_member', payload: { memberId: joined.snapshot.self.memberId },
+    })
+    expect(await guest.execute({ action: 'room_list' })).toEqual({ ok: true, rooms: [] })
+  })
+
+  it('共享账单列表拒绝畸形或超量的本机房间提示', async () => {
+    const { owner } = await fixture()
+    expect(await owner.execute({ action: 'room_list', knownRoomIds: ['short'] })).toEqual({ ok: false, error: 'invalid_room_list' })
+    expect(await owner.execute({ action: 'room_list', knownRoomIds: Array.from({ length: LIMITS.roomsPerUser + 1 }, () => 'room_1234567890123456') }))
+      .toEqual({ ok: false, error: 'invalid_room_list' })
+  })
+
   it('邀请预览最小化；加入自动创建 member/participant 且不认领身份', async () => {
     const { owner, created, service, repository } = await fixture()
     const invitation = await createInvite(owner, created.snapshot)
@@ -449,6 +484,7 @@ describe('微信共享分账 V2 信任边界', () => {
     })
     expect(archived).toMatchObject({ ok: true, revision: 2 })
     expect((await owner.execute({ action: 'room_get', roomId: created.snapshot.room.roomId })).snapshot.room.status).toBe('archived')
+    expect((await owner.execute({ action: 'room_list' })).rooms[0]).toMatchObject({ roomId: created.snapshot.room.roomId, status: 'archived' })
     expect(await owner.execute({
       action: 'room_mutate', roomId: created.snapshot.room.roomId, baseRevision: 2,
       mutationId: 'archived-write-0001', kind: 'set_rounding', payload: { roundToWhole: true },
@@ -644,6 +680,16 @@ describe('共享房间客户端边界', () => {
     expect(second).toEqual(first)
     expect(first.self.avatarEmoji).toBe(first.members[0].avatarEmoji)
     expect(first.self.avatarEmoji).toBe(first.participants[0].avatarEmoji)
+  })
+
+  it('共享历史只接受最小化且经过校验的房间摘要', async () => {
+    const { created } = await fixture()
+    const summary = snapshotToRoomSummary(created.snapshot)
+    expect(parseRoomSummary(summary)).toMatchObject({
+      roomId: created.snapshot.room.roomId, title: '周末旅行', currency: 'CNY', totalMinor: 0, expenseCount: 0, memberCount: 1,
+    })
+    expect(parseRoomSummary({ ...summary, avatars: [{ participantId: 'person-safe', avatarEmoji: 'https://example.com/avatar.png' }] })).toBeNull()
+    expect(parseRoomSummary({ ...summary, memberCount: 0 })).toBeNull()
   })
 
   it('客户端只调用 ledger 云函数，房间资料只包含昵称和 Emoji', () => {

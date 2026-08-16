@@ -17,10 +17,11 @@
 
 - 本地账单：继续使用微信本地存储，完全离线，不上传。
 - 共享账单：用户主动点击“创建共享账单”后，客户端调用 `ledger` 云函数。
-- 身份：云函数只使用 `cloud.getWXContext().OPENID`，不接受客户端声明的 OpenID、角色或房主身份。原始 OpenID 只在请求期间使用；应用集合仅保存“房间 ID + OpenID”的单向哈希文档键，且不同房间不可直接关联。
+- 身份：云函数只使用 `cloud.getWXContext().OPENID`，不接受客户端声明的 OpenID、角色或房主身份。原始 OpenID 只在请求期间使用；成员文档保存“房间 ID + OpenID”的单向哈希权限键，并保存一个不返回客户端的应用内单向用户索引，用于列出当前微信账号仍有权访问的共享账单。
 - 资料：用户只确认房间昵称；系统从固定 50 个动物/食物 Emoji 中自动分配房间标记，成员可修改自己的标记。真实微信头像不请求、不上传、不存储。
 - 数据访问：所有 `ledger_*` 集合均设置为“仅管理端可读写”；客户端只调用云函数。
 - 同步：页面打开立即拉取、`onShow` 拉取、前台每 2.5 秒轮询；revision 未变化时走轻量权限检查，变化时才取完整快照；离线只读本地缓存。
+- 历史：历史页分为“本地 / 共享”。本地记录只读本机存储；共享记录由云函数按当前微信身份和有效成员关系返回，退出、被移除或删除后不再展示，归档账单继续保留为只读记录。
 - 并发：版本化写入包含 `baseRevision` 和稳定 `mutationId`；建房也带 `mutationId`，加入由微信身份唯一键天然幂等。服务端事务处理版本冲突与弱网重放；冲突响应附带已鉴权的最新快照，客户端直接刷新而不静默覆盖。
 - 删除：房主删除先软删除，立即阻止成员访问；30 天后由 `ledger_cleanup` 永久清理。
 - 金额：云端按币种最小单位保存；共享房间有支出时只允许在相同小数精度的币种组内切换，删除全部支出后或创建共享账单前可跨组选择。
@@ -44,6 +45,7 @@
 |---|---|---|
 | `ledger_rooms` | `status, deletedAt` | 找到超过恢复窗的软删除房间 |
 | `ledger_members` | `roomId` | 删除房间时清理成员 |
+| `ledger_members` | `userIndexId` | 按当前微信身份列出仍有权限的共享账单 |
 | `ledger_participants` | `roomId` | 删除房间时清理参与人 |
 | `ledger_expenses` | `roomId` | 删除房间时清理支出 |
 | `ledger_invites` | `roomId` | 清理房间邀请 |
@@ -100,6 +102,7 @@ npm run mini:cloud:deploy:cleanup
 函数设置要求：
 
 - `ledger` 只允许小程序调用，不配置 HTTP 触发器；
+- 发布共享历史前，必须确认 `ledger_members.userIndexId` 单字段索引已创建；否则 `room_list` 会退化成全表扫描；
 - `ledger` 超时时间设为 20 秒；`ledger_cleanup` 超时时间设为 300 秒。部署后在函数配置页核对实际值，不依赖平台默认超时；
 - `ledger_cleanup` 不配置 HTTP 触发器；仓库内 `cloudfunctions/ledger_cleanup/config.json` 定义每天一次的七段 cron 定时触发。上传函数代码后还必须单独上传/核对触发器，确认控制台显示 `dailyLedgerRetention`；
 - `dailyLedgerRetention` 当前为 `0 20 3 * * * *`。部署前在控制台确认触发器时区；若平台显示 UTC，应按目标本地执行时间换算后再启用；

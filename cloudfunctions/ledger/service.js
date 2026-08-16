@@ -13,6 +13,7 @@ const LIMITS = Object.freeze({
   members: 20,
   invites: 30,
   inviteUses: 20,
+  roomsPerUser: 50,
   amountMinor: 100_000_000_000,
 })
 
@@ -171,6 +172,20 @@ function mutationDocId(hash, roomId, memberId, mutationId) {
 
 function roomCreateMutationDocId(hash, openid, mutationId) {
   return hash(`room-create:${openid}:${mutationId}`)
+}
+
+function userIndexId(hash, openid) {
+  return hash(`user-index:${openid}`)
+}
+
+function normalizeKnownRoomIds(value) {
+  if (value === undefined) return []
+  assert(Array.isArray(value) && value.length <= LIMITS.roomsPerUser, 'invalid_room_list')
+  return [...new Set(value.map((roomId) => {
+    const safeRoomId = cleanString(roomId, 80, 'invalid_room_list')
+    assert(/^[A-Za-z0-9_-]{16,80}$/.test(safeRoomId), 'invalid_room_list')
+    return safeRoomId
+  }))]
 }
 
 function active(document) {
@@ -334,6 +349,7 @@ function createLedgerService({
         status: 'active',
         createdAt,
         updatedAt: createdAt,
+        totalMinor: 0,
         deletedAt: null,
         memberDocIds: [memberAuthId(hash, roomId, openid)],
         participantDocIds: [ownerParticipant._id],
@@ -342,6 +358,7 @@ function createLedgerService({
       }
       const owner = {
         _id: memberAuthId(hash, roomId, openid),
+        userIndexId: userIndexId(hash, openid),
         roomId,
         memberId: ownerMemberId,
         displayName: profile.displayName,
@@ -545,6 +562,7 @@ function createLedgerService({
       )
       const member = {
         _id: authId,
+        userIndexId: userIndexId(hash, openid),
         roomId: room._id,
         memberId,
         displayName: profile.displayName,
@@ -618,7 +636,7 @@ function createLedgerService({
         usedAvatars,
         participant.avatarEmoji || member.avatarEmoji,
       )
-      await tx.putMember({ ...member, displayName: profile.displayName, avatarEmoji })
+      await tx.putMember({ ...member, userIndexId: userIndexId(hash, openid), displayName: profile.displayName, avatarEmoji })
       await tx.putParticipant({ ...participant, name: profile.displayName, avatarEmoji, memberId: member.memberId, claimedByMemberId: null })
       const nextRoom = { ...room, revision: room.revision + 1, updatedAt: currentTime }
       await tx.putRoom(nextRoom)
@@ -650,6 +668,54 @@ function createLedgerService({
     throw new LedgerError('revision_conflict')
   }
 
+  async function listRooms(event) {
+    const knownRoomIds = normalizeKnownRoomIds(event.knownRoomIds)
+    const currentUserIndexId = userIndexId(hash, openid)
+
+    if (knownRoomIds.length) {
+      await repository.runTransaction(async (tx) => {
+        for (const roomId of knownRoomIds) {
+          const room = await tx.getRoom(roomId)
+          if (!room || room.status === 'deleted') continue
+          const member = await tx.getMember(memberAuthId(hash, roomId, openid))
+          if (!active(member) || member.userIndexId === currentUserIndexId) continue
+          await tx.putMember({ ...member, userIndexId: currentUserIndexId })
+        }
+      })
+    }
+
+    const rooms = await repository.runRead(async (tx) => {
+      const indexedMemberships = await tx.listMembersByUser(currentUserIndexId)
+      const memberships = [...new Map(indexedMemberships
+        .filter(active)
+        .map((member) => [member.roomId, member])).values()]
+      const summaries = []
+
+      for (const member of memberships.slice(0, LIMITS.roomsPerUser)) {
+        const room = await tx.getRoom(member.roomId)
+        if (!room || room.status === 'deleted') continue
+        const legacyExpenses = Number.isSafeInteger(room.totalMinor) && room.totalMinor >= 0
+          ? null
+          : (await tx.listExpenses(room._id)).filter(active)
+        summaries.push({
+          roomId: room._id,
+          title: room.title,
+          currency: room.currency,
+          status: room.status,
+          updatedAt: room.updatedAt,
+          totalMinor: legacyExpenses ? legacyExpenses.reduce((total, expense) => total + expense.amountMinor, 0) : room.totalMinor,
+          expenseCount: Array.isArray(room.expenseDocIds) ? room.expenseDocIds.length : (legacyExpenses || []).length,
+          memberCount: Array.isArray(room.memberDocIds) ? room.memberDocIds.length : 1,
+          avatars: [],
+        })
+      }
+
+      return summaries.sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')))
+    })
+
+    return { ok: true, rooms }
+  }
+
   async function getRoom(event) {
     const roomId = cleanString(event.roomId, 80, 'invalid_room')
     const knownRevision = Number.isSafeInteger(event.knownRevision) && event.knownRevision >= 1 ? event.knownRevision : 0
@@ -679,6 +745,9 @@ function createLedgerService({
       const expenseId = requestedExpenseId || id('expense')
       const docId = entityDocId(hash, 'expense', room._id, expenseId)
       const existing = await tx.getExpense(docId)
+      const currentTotal = Number.isSafeInteger(room.totalMinor) && room.totalMinor >= 0
+        ? room.totalMinor
+        : (await tx.listExpenses(room._id)).filter(active).reduce((total, expense) => total + expense.amountMinor, 0)
       if (requestedExpenseId) {
         assert(active(existing), 'expense_not_found')
       } else {
@@ -700,14 +769,19 @@ function createLedgerService({
         updatedAt: currentTime,
         deletedAt: null,
       })
+      room.totalMinor = currentTotal + incoming.amountMinor - (active(existing) ? existing.amountMinor : 0)
       return { entityId: expenseId }
     }
     if (kind === 'delete_expense') {
       const expenseId = cleanString(payload.expenseId, 80, 'invalid_expense')
       const existing = await tx.getExpense(entityDocId(hash, 'expense', room._id, expenseId))
       assert(active(existing), 'expense_not_found')
+      const currentTotal = Number.isSafeInteger(room.totalMinor) && room.totalMinor >= 0
+        ? room.totalMinor
+        : (await tx.listExpenses(room._id)).filter(active).reduce((total, expense) => total + expense.amountMinor, 0)
       await tx.putExpense({ ...existing, deletedAt: currentTime, updatedAt: currentTime })
       room.expenseDocIds = (room.expenseDocIds || []).filter((documentId) => documentId !== existing._id)
+      room.totalMinor = Math.max(0, currentTotal - existing.amountMinor)
       return { entityId: expenseId }
     }
     if (['add_participant', 'rename_participant', 'remove_participant'].includes(kind)) {
@@ -849,6 +923,7 @@ function createLedgerService({
       if (action === 'room_join_preview') return await invitePreview(event)
       if (action === 'room_join') return await joinRoom(event)
       if (action === 'room_get') return await getRoom(event)
+      if (action === 'room_list') return await listRooms(event)
       if (action === 'room_profile_update') return await updateProfile(event)
       if (action === 'room_mutate') return await mutateRoom(event)
       if (action === 'room_manage') return await manageRoom(event)

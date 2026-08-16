@@ -62,8 +62,12 @@
             <view><label class="field-label">付款人</label><picker range="{{participantNames}}" value="{{payerIndex}}" bindchange="onPayerChange"><view class="picker-field">{{participantNames[payerIndex] || '请选择'}} <text>⌄</text></view></picker></view>
           </view>
           <label class="field-label">由谁分摊</label>
-          <view class="segment-control"><button class="{{expenseForm.splitMode === 'everyone' ? 'is-active' : ''}}" bindtap="chooseEveryone">所有人</button><button class="{{expenseForm.splitMode === 'custom' ? 'is-active' : ''}}" bindtap="chooseCustom">选择成员</button></view>
+          <view class="split-mode-control">
+            <button class="split-mode-option {{expenseForm.splitMode === 'everyone' ? 'is-active' : ''}}" bindtap="chooseEveryone" aria-label="全员均摊"><text class="split-mode-mark">{{expenseForm.splitMode === 'everyone' ? '✓' : ''}}</text><view class="split-mode-copy"><text>全员均摊</text><text>{{participantsView.length}} 人参与</text></view></button>
+            <button class="split-mode-option {{expenseForm.splitMode === 'custom' ? 'is-active' : ''}}" bindtap="chooseCustom" aria-label="指定成员分摊"><text class="split-mode-mark">{{expenseForm.splitMode === 'custom' ? '✓' : ''}}</text><view class="split-mode-copy"><text>指定成员</text><text wx:if="{{expenseForm.splitMode === 'custom'}}">{{expenseForm.selectedIds.length}} 人已选</text><text wx:else>按需选择</text></view></button>
+          </view>
           <view class="split-grid" wx:if="{{expenseForm.splitMode === 'custom'}}">
+            <text class="split-grid-help">点选参与这笔支出的人</text>
             <button class="split-option {{item.selected ? 'is-selected' : ''}}" wx:for="{{participantsView}}" wx:key="participantId" data-id="{{item.participantId}}" bindtap="toggleSplitPerson"><view><view class="avatar avatar-small {{item.avatarClass}}">{{item.avatarEmoji}}</view><text>{{item.name}}</text></view><text>{{item.selected ? '✓' : '+'}}</text></button>
           </view>
           <text class="form-error" wx:if="{{formError}}">{{formError}}</text>

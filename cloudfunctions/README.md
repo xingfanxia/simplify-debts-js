@@ -14,7 +14,8 @@ and ordinary local ledgers are never uploaded.
   `cloud.getWXContext()`, validates every request, enforces room membership, and
   performs writes with server-side transactions. Application collections do not
   persist raw OpenID; a room-scoped one-way authorization document ID is derived
-  at request time instead.
+  at request time instead. An app-scoped one-way user index supports the
+  authorized shared-room history and is never returned to the client.
 - `ledger_cleanup`: scheduled retention worker. It permanently purges rooms 30
   days after an owner soft-deletes them. It rejects invocations carrying a mini
   program `OPENID`; do not expose it through an HTTP trigger.

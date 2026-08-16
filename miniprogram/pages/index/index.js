@@ -6,7 +6,7 @@ import {
   randomAvatarEmoji,
 } from '../../lib/avatar'
 import { detectCurrency, getMessages, translate } from '../../lib/i18n'
-import { callLedger, getCachedRooms, isZeroDecimalCurrency, makeMutationId, parseAmountMinor, saveRoomCache, sharedRoomsAvailable } from '../../lib/rooms'
+import { callLedger, getRoomDirectory, isZeroDecimalCurrency, makeMutationId, parseAmountMinor, saveRoomCache, sharedRoomsAvailable } from '../../lib/rooms'
 import { drawSettlementCard, exportSettlementImage, settlementCanvasHeight } from '../../lib/settlement-image'
 import {
   createHistoryEntry,
@@ -213,7 +213,7 @@ Page({
       t,
       themeClass: theme === 'dark' ? 'theme-dark' : '',
       state,
-      historyCount: getHistory().length + getCachedRooms().length,
+      historyCount: getHistory().length + getRoomDirectory().length,
       currencyValues,
       currencyLabels: [translate(language, 'automatic', { value: currency }), ...CURRENCIES.map((code) => `${CURRENCY_NAMES[code]}（${code}）`)],
       currencyIndex: Math.max(0, currencyValues.indexOf(preferences.currency)),

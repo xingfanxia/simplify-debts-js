@@ -4,7 +4,9 @@ import { CURRENCIES } from './storage'
 
 const ROOM_CACHE_PREFIX = 'settle-shared-room-cache-v2:'
 const ACTIVE_ROOM_IDS_KEY = 'settle-shared-room-ids-v2'
+const ROOM_DIRECTORY_KEY = 'settle-shared-room-directory-v1'
 const MAX_CACHED_ROOMS = 12
+const MAX_ROOM_DIRECTORY = 50
 const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW'])
 const CURRENCY_SYMBOLS = {
   USD: '$', EUR: '€', GBP: '£', CAD: 'CA$', AUD: 'A$', CNY: '¥', JPY: '¥', KRW: '₩',
@@ -278,6 +280,43 @@ export function parseRoomSnapshot(value) {
   }
 }
 
+export function parseRoomSummary(value) {
+  if (!isRecord(value)) return null
+  const roomId = cleanString(value.roomId, 80)
+  const title = cleanString(value.title, 60)
+  const currency = cleanString(value.currency, 8)
+  const status = cleanString(value.status, 16)
+  const updatedAt = cleanString(value.updatedAt, 40)
+  if (!roomId || !title || !CURRENCIES.includes(currency) || !['active', 'archived'].includes(status)) return null
+  if (!Number.isSafeInteger(value.totalMinor) || value.totalMinor < 0) return null
+  if (!Number.isSafeInteger(value.expenseCount) || value.expenseCount < 0) return null
+  if (!Number.isSafeInteger(value.memberCount) || value.memberCount < 1) return null
+  const avatars = Array.isArray(value.avatars) ? value.avatars.slice(0, 4).map((avatar) => {
+    const participantId = cleanString(avatar && avatar.participantId, 80)
+    return participantId && isAvatarEmoji(avatar.avatarEmoji)
+      ? { participantId, avatarEmoji: avatar.avatarEmoji }
+      : null
+  }) : []
+  if (avatars.some((avatar) => !avatar)) return null
+  return { roomId, title, currency, status, updatedAt, totalMinor: value.totalMinor, expenseCount: value.expenseCount, memberCount: value.memberCount, avatars }
+}
+
+export function snapshotToRoomSummary(snapshot) {
+  const parsed = parseRoomSnapshot(snapshot)
+  if (!parsed) return null
+  return {
+    roomId: parsed.room.roomId,
+    title: parsed.room.title,
+    currency: parsed.room.currency,
+    status: parsed.room.status,
+    updatedAt: parsed.room.updatedAt,
+    totalMinor: parsed.expenses.reduce((total, expense) => total + expense.amountMinor, 0),
+    expenseCount: parsed.expenses.length,
+    memberCount: parsed.members.length,
+    avatars: parsed.participants.slice(0, 4).map(({ participantId, avatarEmoji }) => ({ participantId, avatarEmoji })),
+  }
+}
+
 export function snapshotToDebtState(snapshot) {
   return {
     participants: snapshot.participants.map(({ participantId, name, avatarEmoji }) => ({ id: participantId, name, avatarEmoji })),
@@ -303,6 +342,64 @@ function rememberRoomId(roomId) {
   }
 }
 
+function readStoredRoomDirectory() {
+  try {
+    const value = wx.getStorageSync(ROOM_DIRECTORY_KEY)
+    if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.rooms)) return []
+    return value.rooms.map(parseRoomSummary).filter(Boolean).slice(0, MAX_ROOM_DIRECTORY)
+  } catch (_error) {
+    return []
+  }
+}
+
+export function saveRoomDirectory(values) {
+  const existingById = new Map(readStoredRoomDirectory().map((room) => [room.roomId, room]))
+  const rooms = Array.isArray(values)
+    ? [...new Map(values.map(parseRoomSummary).filter(Boolean).map((room) => {
+      const existing = existingById.get(room.roomId)
+      return [room.roomId, !room.avatars.length && existing?.avatars.length ? { ...room, avatars: existing.avatars } : room]
+    })).values()]
+      .sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')))
+      .slice(0, MAX_ROOM_DIRECTORY)
+    : []
+  try {
+    wx.setStorageSync(ROOM_DIRECTORY_KEY, { version: 1, cachedAt: new Date().toISOString(), rooms })
+  } catch (_error) {
+    // The cloud directory remains authoritative when local storage is unavailable.
+  }
+  return rooms
+}
+
+export function getRoomDirectory() {
+  const stored = readStoredRoomDirectory()
+  let cachedIds = []
+  try {
+    const value = wx.getStorageSync(ACTIVE_ROOM_IDS_KEY)
+    cachedIds = Array.isArray(value) ? value : []
+  } catch (_error) {
+    cachedIds = []
+  }
+  const legacyCached = cachedIds.map((roomId) => {
+    const cached = getRoomCache(roomId)
+    return cached ? snapshotToRoomSummary(cached.snapshot) : null
+  }).filter(Boolean)
+  return [...new Map([...stored, ...legacyCached].map((room) => [room.roomId, room])).values()]
+    .sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')))
+    .slice(0, MAX_ROOM_DIRECTORY)
+}
+
+export function getKnownRoomIds() {
+  return getRoomDirectory().map(({ roomId }) => roomId).slice(0, MAX_ROOM_DIRECTORY)
+}
+
+export async function listSharedRooms() {
+  const result = await callLedger('room_list', { knownRoomIds: getKnownRoomIds() })
+  if (!Array.isArray(result.rooms)) throw new RoomError('invalid_room_list')
+  const rooms = result.rooms.map(parseRoomSummary)
+  if (rooms.some((room) => !room)) throw new RoomError('invalid_room_list')
+  return saveRoomDirectory(rooms)
+}
+
 export function saveRoomCache(value) {
   const snapshot = parseRoomSnapshot(value)
   if (!snapshot) throw new RoomError('invalid_snapshot')
@@ -313,6 +410,8 @@ export function saveRoomCache(value) {
       snapshot,
     })
     rememberRoomId(snapshot.room.roomId)
+    const summary = snapshotToRoomSummary(snapshot)
+    if (summary) saveRoomDirectory([summary, ...readStoredRoomDirectory().filter(({ roomId }) => roomId !== summary.roomId)])
   } catch (_error) {
     // Cache failure must not turn a successful cloud write into a failed write.
   }
@@ -339,6 +438,7 @@ export function clearRoomCache(roomId) {
     wx.removeStorageSync(`${ROOM_CACHE_PREFIX}${safeRoomId}`)
     const existing = wx.getStorageSync(ACTIVE_ROOM_IDS_KEY)
     if (Array.isArray(existing)) wx.setStorageSync(ACTIVE_ROOM_IDS_KEY, existing.filter((id) => id !== safeRoomId))
+    saveRoomDirectory(readStoredRoomDirectory().filter((room) => room.roomId !== safeRoomId))
   } catch (_error) {
     // Nothing else to clean up.
   }

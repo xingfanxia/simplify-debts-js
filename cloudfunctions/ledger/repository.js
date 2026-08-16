@@ -39,6 +39,11 @@ async function putDocument(transaction, collectionName, document) {
   await transaction.collection(collectionName).doc(document._id).set({ data: withoutId(document) })
 }
 
+async function listDocumentsWhere(database, collectionName, query, limit = 50) {
+  const result = await database.collection(collectionName).where(query).limit(limit).get()
+  return Array.isArray(result && result.data) ? result.data : []
+}
+
 function transactionAdapter(transaction) {
   const roomCache = new Map()
   async function getRoom(roomId) {
@@ -91,6 +96,7 @@ function readAdapter(database) {
   return {
     getRoom: (roomId) => getDocument(database, COLLECTIONS.rooms, roomId),
     getMember: (documentId) => getDocument(database, COLLECTIONS.members, documentId),
+    listMembersByUser: (userIndexId) => listDocumentsWhere(database, COLLECTIONS.members, { userIndexId }),
     listMembers: (roomId) => listIndexed(roomId, COLLECTIONS.members, 'memberDocIds'),
     listParticipants: (roomId) => listIndexed(roomId, COLLECTIONS.participants, 'participantDocIds'),
     listExpenses: (roomId) => listIndexed(roomId, COLLECTIONS.expenses, 'expenseDocIds'),

@@ -59,10 +59,17 @@ button { margin: 0; }
 .two-fields { display: grid; grid-template-columns: 1fr; gap: 0; }
 .two-fields > view + view { margin-top: 20rpx; }
 .picker-field { display: flex; align-items: center; justify-content: space-between; line-height: 92rpx; }
-.segment-control { display: grid; grid-template-columns: 1fr 1fr; padding: 5rpx; gap: 5rpx; background: var(--surface-2); border: 2rpx solid var(--line); border-radius: 14rpx; }
-.segment-control button { width: 100% !important; min-width: 0; min-height: 44px; margin: 0 !important; padding: 0; color: var(--muted); font-size: 28rpx; font-weight: 650; line-height: 1.2; background: transparent; border-radius: 11rpx; }
-.segment-control button.is-active { color: var(--primary-ink); background: var(--primary); }
+.split-mode-control { display: flex; align-items: stretch; gap: 10rpx; }
+.split-mode-option { display: flex; flex: 1 1 0; width: 0 !important; min-width: 0; min-height: 58px; margin: 0 !important; padding: 12rpx 14rpx; align-items: center; justify-content: center; gap: 11rpx; color: var(--ink); line-height: 1.2; text-align: left; background: var(--surface); border: 2rpx solid var(--line); border-radius: 15rpx; }
+.split-mode-option.is-active { background: var(--accent); border-color: var(--primary); }
+.split-mode-mark { display: flex; flex: 0 0 38rpx; width: 38rpx; height: 38rpx; align-items: center; justify-content: center; color: transparent; font-size: 24rpx; font-weight: 800; line-height: 1; background: var(--surface-2); border: 2rpx solid var(--line); border-radius: 50%; }
+.split-mode-option.is-active .split-mode-mark { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); }
+.split-mode-copy { display: flex; min-width: 0; flex-direction: column; justify-content: center; }
+.split-mode-copy text { display: block; line-height: 1.2; }
+.split-mode-copy text:first-child { color: var(--ink); font-size: 27rpx; font-weight: 720; }
+.split-mode-copy text:last-child { margin-top: 5rpx; color: var(--muted); font-size: 21rpx; font-weight: 550; }
 .split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8rpx; margin-top: 12rpx; }
+.split-grid-help { grid-column: 1 / -1; color: var(--muted); font-size: 23rpx; line-height: 1.4; }
 .split-option { display: flex; width: 100% !important; min-width: 0; min-height: 48px; margin: 0 !important; padding: 0 14rpx; align-items: center; justify-content: space-between; color: var(--muted); font-size: 27rpx; line-height: 1.2; text-align: left; background: var(--surface-2); border: 2rpx solid var(--line); border-radius: 12rpx; }
 .split-option > view { display: flex; min-width: 0; align-items: center; gap: 9rpx; }
 .split-option > view > text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -150,7 +157,9 @@ button { margin: 0; }
   .field-input, .picker-field { height: 46px; font-size: 16px; }
   .picker-field { line-height: 46px; }
   .primary-button, .invite-button { min-height: 46px; font-size: 15px; line-height: 46px; }
-  .segment-control button, .split-option, .member-row button, .expense-actions button, .dialog-actions button, .room-share-button { min-height: 44px; font-size: 14px; line-height: 44px; }
+  .split-mode-option, .split-option, .member-row button, .expense-actions button, .dialog-actions button, .room-share-button { min-height: 44px; font-size: 14px; }
+  .split-mode-copy text:first-child { font-size: 14px; }
+  .split-mode-copy text:last-child, .split-grid-help { font-size: 12px; }
   .summary-card text:last-child, .expense-main text:first-child, .expense-money, .transfer-name, .member-row text:first-child, .rounding-row text:first-child { font-size: 16px; }
   .transfer-row { grid-template-columns: minmax(0, 1fr) minmax(128rpx, auto) minmax(0, 1fr); gap: 7rpx; }
   .transfer-money { font-size: 16px; }

@@ -1,17 +1,26 @@
 <view class="history-page {{themeClass}}">
   <view class="page-intro">
     <text class="page-title">账单记录</text>
-    <text class="page-subtitle">本地结算保存在这台设备；共享账单从云端同步。</text>
+    <text class="page-subtitle">本地账单留在本机，共享账单跟随你的微信身份。</text>
   </view>
 
-  <view class="history-empty" wx:if="{{!entries.length && !sharedEntries.length}}">
-    <view class="empty-icon"><view></view><view></view><view></view></view>
-    <text>{{t.noSavedTitle}}</text>
-    <text>{{t.noSavedBody}}</text>
+  <view class="history-tabs">
+    <button class="history-tab {{activeTab === 'local' ? 'active' : ''}}" data-tab="local" bindtap="setTab">
+      <text>本地</text><text>{{entries.length}}</text>
+    </button>
+    <button class="history-tab {{activeTab === 'shared' ? 'active' : ''}}" data-tab="shared" bindtap="setTab">
+      <text>共享</text><text>{{sharedEntries.length}}</text>
+    </button>
   </view>
 
-  <view class="history-section" wx:if="{{sharedEntries.length}}">
-    <view class="section-label"><text>共享账单</text><text>{{sharedEntries.length}}</text></view>
+  <view wx:if="{{activeTab === 'shared'}}">
+    <view class="sync-note" wx:if="{{sharedLoading}}"><view class="sync-dot"></view><text>正在同步共享账单…</text></view>
+    <view class="sync-note error" wx:elif="{{sharedError}}"><text>{{sharedError}}</text></view>
+    <view class="history-empty" wx:if="{{!sharedEntries.length && !sharedLoading}}">
+      <view class="empty-icon shared"><view></view><view></view></view>
+      <text>还没有共享账单</text>
+      <text>创建账单或接受好友邀请后，会自动出现在这里。</text>
+    </view>
     <view class="history-list">
       <view class="history-entry shared-entry" wx:for="{{sharedEntries}}" wx:key="roomId">
         <view class="entry-header"><view class="entry-heading"><view class="entry-date">{{item.statusText}} · {{item.currency}}</view><text class="entry-title">{{item.title}}</text></view></view>
@@ -21,8 +30,12 @@
     </view>
   </view>
 
-  <view class="history-section" wx:if="{{entries.length}}">
-    <view class="section-label"><text>{{t.savedSettlements}}</text><text>{{entries.length}}</text></view>
+  <view wx:if="{{activeTab === 'local'}}">
+    <view class="history-empty" wx:if="{{!entries.length}}">
+      <view class="empty-icon"><view></view><view></view><view></view></view>
+      <text>{{t.noSavedTitle}}</text>
+      <text>完成本地账单后，点击“保存并新建”即可留在这里。</text>
+    </view>
     <view class="history-list">
     <view class="history-entry" wx:for="{{entries}}" wx:key="id">
       <view class="entry-header">

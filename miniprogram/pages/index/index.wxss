@@ -11,7 +11,7 @@
 .people-form,
 .person-chip,
 .field-row,
-.segment-control,
+.split-mode-control,
 .editing-banner,
 .subheading,
 .settlement-header,
@@ -236,10 +236,17 @@
 .picker-field { display: flex; align-items: center; justify-content: space-between; padding: 0 18rpx; overflow: hidden; font-size: 27rpx; text-overflow: ellipsis; white-space: nowrap; }
 .picker-field text { margin-left: 8rpx; color: var(--muted); }
 .split-label { margin-top: 22rpx; }
-.segment-control { gap: 6rpx; padding: 6rpx; background: var(--surface); border: 2rpx solid var(--line); border-radius: 16rpx; }
-.segment-control button { flex: 1; width: 100% !important; min-width: 0; min-height: 44px; margin: 0 !important; padding: 0 12rpx; color: var(--muted); font-size: 27rpx; font-weight: 650; line-height: 1.2; background: transparent; border-radius: 11rpx; }
-.segment-control button.is-active { color: var(--primary-ink); background: var(--primary); }
+.split-mode-control { display: flex; align-items: stretch; gap: 10rpx; }
+.split-mode-option { display: flex; flex: 1 1 0; width: 0 !important; min-width: 0; min-height: 58px; margin: 0 !important; padding: 12rpx 14rpx; align-items: center; justify-content: center; gap: 11rpx; color: var(--ink); line-height: 1.2; text-align: left; background: var(--surface); border: 2rpx solid var(--line); border-radius: 15rpx; }
+.split-mode-option.is-active { background: var(--accent); border-color: var(--primary); }
+.split-mode-mark { display: flex; flex: 0 0 38rpx; width: 38rpx; height: 38rpx; align-items: center; justify-content: center; color: transparent; font-size: 24rpx; font-weight: 800; line-height: 1; background: var(--surface-2); border: 2rpx solid var(--line); border-radius: 50%; }
+.split-mode-option.is-active .split-mode-mark { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); }
+.split-mode-copy { display: flex; min-width: 0; flex-direction: column; justify-content: center; }
+.split-mode-copy text { display: block; line-height: 1.2; }
+.split-mode-copy text:first-child { color: var(--ink); font-size: 27rpx; font-weight: 720; }
+.split-mode-copy text:last-child { margin-top: 5rpx; color: var(--muted); font-size: 21rpx; font-weight: 550; }
 .split-people { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 14rpx; }
+.split-people-help { flex: 0 0 100%; color: var(--muted); font-size: 23rpx; line-height: 1.4; }
 .split-chip { display: flex; width: auto !important; min-width: 0; min-height: 44px; margin: 0 !important; padding: 0 14rpx 0 9rpx; align-items: center; gap: 8rpx; color: var(--muted); font-size: 26rpx; line-height: 1; background: var(--surface); border: 2rpx solid var(--line); border-radius: 99rpx; }
 .split-chip.is-selected { color: var(--ink); border-color: var(--primary); }
 .split-chip .check { width: 24rpx; color: var(--primary); font-weight: 750; text-align: center; }
