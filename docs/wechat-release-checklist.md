@@ -31,9 +31,9 @@ Use the following facts when completing the platform privacy form:
   from a fixed animal/food allowlist and lets the member change it. It does not
   request, upload, or store the user's real WeChat avatar.
 - Shared-room authorization uses the caller's WeChat OpenID transiently inside
-  the Cloud Function. Application collections retain only a room-scoped one-way
-  authorization document ID; raw OpenID is neither persisted there nor returned
-  to the client.
+  the Cloud Function. Application collections retain only one-way authorization
+  values scoped to the room or this mini program; raw OpenID is neither persisted
+  there nor returned to the client.
 - Clipboard writing and image saving/sharing happen only after the user taps the
   corresponding action.
 - The mini program does not request contacts, precise location, microphone,
@@ -48,24 +48,35 @@ Suggested privacy summary:
 
 > 本小程序无需另行注册账号。普通账单和历史记录默认仅保存在用户设备。只有用户主动创建或加入共享账单时，房间昵称、Emoji 标记、成员关系、币种和支出才会上传至微信云开发，用于向已加入的房间成员同步账单。本小程序不采集微信头像。房主可删除共享账单；删除后立即停止访问，并在 30 天恢复窗后永久清理。
 
-## Next upload
+## Current upload
 
-- Production backend checkpoint (2026-08-15): the authorized `ledger` update is
-  Active and its downloaded application source matches the repository. The
-  cleanup function, database, privacy form, and uploaded mini-program code were
-  not changed.
-- Version: use the next account-approved version number; do not reuse an existing upload.
-- Upload description: `双模式分账：本地快速计算或微信群共享；新增稳定 Emoji 成员标记、共享资料编辑与可读结算图。`
-- Reviewer test path:
-  1. Tap `载入示例`.
-  2. Confirm that the settlement plan appears.
-  3. Edit one expense and save it.
-  4. Tap `分享结算图` and confirm the portrait card is readable.
-  5. Tap `保存并新建`, name the settlement, then reopen it from `历史`.
-  6. Change the currency and appearance from the compact controls at the top of the main screen.
-  7. Switch from `本地快速分账` to `共享账单` from an empty local state; enter a room name, currency, and nickname, optionally change the proposed Emoji, create the empty room, and generate an invitation.
-  8. Open the invitation with a second WeChat account; before joining it must show only the room name, currency, and member count. Confirm a nickname and join without identity claiming or avatar authorization; only then may it show the full ledger and the automatically assigned Emoji.
-  9. Confirm that each member can change only their own nickname/Emoji and that the settlement image shows full names, clear arrows, amounts, and Emoji in both themes.
+- Version `2.0.4` was uploaded on 2026-08-15 from commit `950a33d` with the
+  description `共享账单历史与分摊布局优化`.
+- The production `ledger` function is Active with a 20-second timeout. Its
+  downloaded application source matches the repository, and an authenticated
+  developer-tools smoke test confirmed that `room_list` returns successfully.
+- The mini-program upload completed at 173.5 KB. Upload is not the same as review
+  or public release.
+- Before review, create the non-unique ascending single-field index
+  `ledger_members.userIndexId`, then confirm the current privacy form still
+  matches this document.
+- Review submission and public release remain pending until the account holder
+  completes the platform-controlled login/review steps and any outstanding
+  filing or verification gate.
+- For the next upload, use a new account-approved version number; do not reuse
+  `2.0.4`.
+
+## Reviewer test path
+
+1. Tap `载入示例`.
+2. Confirm that the settlement plan appears.
+3. Edit one expense and save it.
+4. Tap `分享结算图` and confirm the portrait card is readable.
+5. Tap `保存并新建`, name the settlement, then reopen it from `历史`.
+6. Change the currency and appearance from the compact controls at the top of the main screen.
+7. Switch from `本地快速分账` to `共享账单` from an empty local state; enter a room name, currency, and nickname, optionally change the proposed Emoji, create the empty room, and generate an invitation.
+8. Open the invitation with a second WeChat account; before joining it must show only the room name, currency, and member count. Confirm a nickname and join without identity claiming or avatar authorization; only then may it show the full ledger and the automatically assigned Emoji.
+9. Confirm that each member can change only their own nickname/Emoji and that the settlement image shows full names, clear arrows, amounts, and Emoji in both themes.
 
 ## Release commands
 
