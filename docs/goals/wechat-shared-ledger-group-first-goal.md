@@ -16,6 +16,7 @@
 - Verified implementation checkpoint (2026-08-15): 首页已改成常驻双模式；本地、共享、历史和结算图已统一使用受限 Emoji；服务端 profile、事务内分配和旧数据兼容已实现，仍需通过本 Goal 的完整门禁并提交。
 - Verified visual checkpoint (2026-08-15): 微信开发者工具 `2.02.2607171`、基础库 `3.17.0` 已检查 320、390、430px；详细记录位于 `docs/wechat-v2-visual-verification.md`。
 - Verified production preflight (2026-08-15, read-only): `cloud1-d3gbdocpk8fcb2e97` 中 `ledger` 与 `ledger_cleanup` 均为 Active；下载比对确认线上 `ledger` 尚无 `avatar.js` 且 `service.js` 与当前提交不同，`ledger_cleanup` 的应用源码未变。下一项生产变更只需部署 `ledger`，仍需用户新授权。
+- Verified production deployment (2026-08-15, authorized): `ledger` 已向 `cloud1-d3gbdocpk8fcb2e97` 更新 5 个文件并保持 Active；部署后下载的应用源码与当前 `cloudfunctions/ledger/` 逐文件一致，真实微信云函数上下文的无写入负向请求返回 `invalid_avatar`。`ledger_cleanup`、数据库、隐私指引和小程序版本均未变更。
 - Decision: 不获取或保存真实头像；默认使用 50 个受限动物/食物 Emoji，自动分配并持久化，用户可选修改。
 - Assumption: 共享房间人数上限低于 50，因此自动分配在正常范围内可以做到房间内不重复。若代码事实不符，先调整规则和测试，不扩大资源范围。
 

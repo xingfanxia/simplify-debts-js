@@ -50,6 +50,10 @@ Suggested privacy summary:
 
 ## Next upload
 
+- Production backend checkpoint (2026-08-15): the authorized `ledger` update is
+  Active and its downloaded application source matches the repository. The
+  cleanup function, database, privacy form, and uploaded mini-program code were
+  not changed.
 - Version: use the next account-approved version number; do not reuse an existing upload.
 - Upload description: `双模式分账：本地快速计算或微信群共享；新增稳定 Emoji 成员标记、共享资料编辑与可读结算图。`
 - Reviewer test path:
