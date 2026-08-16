@@ -57,9 +57,9 @@ Suggested privacy summary:
   developer-tools smoke test confirmed that `room_list` returns successfully.
 - The mini-program upload completed at 173.5 KB. Upload is not the same as review
   or public release.
-- Before review, create the non-unique ascending single-field index
-  `ledger_members.userIndexId`, then confirm the current privacy form still
-  matches this document.
+- The non-unique ascending single-field index `ledger_members.userIndexId` was
+  created in the production database on 2026-08-15.
+- Before review, confirm the current privacy form still matches this document.
 - Review submission and public release remain pending until the account holder
   completes the platform-controlled login/review steps and any outstanding
   filing or verification gate.
